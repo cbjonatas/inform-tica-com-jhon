@@ -3,17 +3,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   AlertTriangle,
-  CheckCircle2,
   Filter,
   HelpCircle,
   RotateCcw,
   Sparkles,
   Star,
-  XCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { QuestionCard } from "@/components/QuestionCard";
 
 export const Route = createFileRoute("/_authenticated/questoes")({
   head: () => ({
@@ -45,7 +44,11 @@ function QuestoesPage() {
       const [modulesRes, questionsRes, attemptsRes, favsRes] = await Promise.all([
         supabase.from("modules").select("id, title").order("position"),
         supabase.from("questions").select("*, modules(title)").order("created_at", { ascending: false }),
-        supabase.from("question_attempts").select("question_id, selected_index, is_correct, created_at").eq("user_id", user?.id || "").order("created_at", { ascending: false }),
+        supabase
+          .from("question_attempts")
+          .select("question_id, selected_index, is_correct, created_at")
+          .eq("user_id", user?.id || "")
+          .order("created_at", { ascending: false }),
         supabase.from("favorites").select("item_id").eq("item_type", "question").eq("user_id", user?.id || ""),
       ]);
 
@@ -107,7 +110,6 @@ function QuestoesPage() {
   const allQuestions = data?.questions ?? [];
   const attempts = data?.attempts ?? [];
 
-  // Mapa com a tentativa mais recente de cada questão
   const latestAttemptMap = new Map<string, { selected_index: number; is_correct: boolean }>();
   attempts.forEach((a) => {
     if (a.question_id && !latestAttemptMap.has(a.question_id)) {
@@ -115,7 +117,6 @@ function QuestoesPage() {
     }
   });
 
-  // Conjunto de questões erradas pelo aluno
   const wrongQuestionIds = new Set(
     Array.from(latestAttemptMap.entries())
       .filter(([_, att]) => !att.is_correct)
@@ -124,38 +125,18 @@ function QuestoesPage() {
 
   const bancas = Array.from(new Set(allQuestions.map((q) => q.banca).filter(Boolean)));
 
-  // Filtragem de questões
   const filteredQuestions = allQuestions.filter((q) => {
-    // Modo de visualização
     if (viewMode === "erradas" && !wrongQuestionIds.has(q.id)) return false;
     if (viewMode === "favoritas" && !favoritedIds.has(q.id)) return false;
-
-    // Filtros secundários
     if (selectedModule !== "all" && q.module_id !== selectedModule) return false;
     if (selectedBanca !== "all" && q.banca !== selectedBanca) return false;
     if (selectedDifficulty !== "all" && (q.difficulty || "medio") !== selectedDifficulty) return false;
-
     return true;
   });
 
-  // Estatísticas do aluno
   const totalRespondidas = attempts.length;
   const totalAcertos = attempts.filter((a) => a.is_correct).length;
   const taxaAcerto = totalRespondidas ? Math.round((totalAcertos / totalRespondidas) * 100) : 0;
-
-  const handleSelectOption = (qId: string, optIndex: number, correctIndex: number) => {
-    setSelectedAnswers((prev) => ({ ...prev, [qId]: optIndex }));
-    const isCorrect = optIndex === correctIndex;
-    recordAttemptMutation.mutate({ qId, optIndex, isCorrect });
-  };
-
-  const handleRetry = (qId: string) => {
-    setSelectedAnswers((prev) => {
-      const next = { ...prev };
-      delete next[qId];
-      return next;
-    });
-  };
 
   if (isLoading) {
     return (
@@ -205,7 +186,7 @@ function QuestoesPage() {
         </div>
       </section>
 
-      {/* Seletor de Modo: Todas / Minhas Questões Erradas / Favoritas */}
+      {/* Seletor de Modo */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
         {[
           { id: "todas", label: "Todas as Questões", count: allQuestions.length },
@@ -236,7 +217,7 @@ function QuestoesPage() {
         ))}
       </div>
 
-      {/* Barra de Filtros */}
+      {/* Filtros */}
       <div className="panel p-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
           <Filter className="size-4 text-accent" />
@@ -296,126 +277,32 @@ function QuestoesPage() {
         </div>
       </div>
 
-      {/* Listagem de Questões */}
+      {/* Lista de Questões renderizadas com QuestionCard */}
       <section className="space-y-6">
         {filteredQuestions.map((q, qIndex) => {
-          const options = Array.isArray(q.options) ? (q.options as string[]) : [];
           const savedAttempt = latestAttemptMap.get(q.id);
           const currentSelectedIndex = selectedAnswers[q.id] ?? savedAttempt?.selected_index;
-          const hasAnswered = currentSelectedIndex !== undefined;
-          const isCorrect = currentSelectedIndex === q.correct_index;
-          const isFav = favoritedIds.has(q.id);
 
           return (
-            <div key={q.id} className="panel p-6 space-y-4">
-              {/* Header da questão com botão de favoritar */}
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs border-b border-border/50 pb-3">
-                <div className="flex items-center gap-2 font-semibold">
-                  <span className="text-primary font-bold">QUESTÃO #{qIndex + 1}</span>
-                  {q.banca && (
-                    <span className="rounded-md bg-secondary px-2 py-0.5 text-foreground font-mono">
-                      {q.banca}
-                    </span>
-                  )}
-                  {q.ano && <span className="text-muted-foreground">{q.ano}</span>}
-                  {q.difficulty && (
-                    <span className="rounded bg-accent/10 px-2 py-0.5 text-accent text-[10px] uppercase font-bold">
-                      {q.difficulty}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => toggleFavorite(q)}
-                    className={cn(
-                      "p-1.5 rounded-lg transition-colors",
-                      isFav ? "text-amber-400 bg-amber-400/10" : "text-muted-foreground hover:text-foreground"
-                    )}
-                    title={isFav ? "Remover dos favoritos" : "Salvar nos favoritos"}
-                  >
-                    <Star className={cn("size-4", isFav && "fill-current")} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Enunciado */}
-              <p className="text-base text-foreground leading-relaxed">{q.statement}</p>
-
-              {/* Alternativas */}
-              <div className="space-y-2.5 pt-2">
-                {options.map((opt, optIndex) => {
-                  const isSelected = currentSelectedIndex === optIndex;
-                  const isThisCorrect = optIndex === q.correct_index;
-
-                  let styleClass = "border-border bg-secondary/20 hover:bg-secondary/60";
-                  if (hasAnswered) {
-                    if (isThisCorrect) {
-                      styleClass = "border-emerald-500/50 bg-emerald-500/10 text-emerald-500 font-semibold";
-                    } else if (isSelected) {
-                      styleClass = "border-red-500/50 bg-red-500/10 text-red-500 line-through";
-                    } else {
-                      styleClass = "opacity-50 border-border";
-                    }
-                  }
-
-                  return (
-                    <button
-                      key={optIndex}
-                      disabled={hasAnswered}
-                      onClick={() => handleSelectOption(q.id, optIndex, q.correct_index)}
-                      className={cn(
-                        "flex w-full items-start gap-3.5 rounded-xl border p-3.5 text-left text-sm transition-all",
-                        styleClass
-                      )}
-                    >
-                      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-secondary font-mono text-xs font-bold">
-                        {String.fromCharCode(65 + optIndex)}
-                      </span>
-                      <span className="flex-1 leading-relaxed">{opt}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Feedback, Gabarito, Comentário e Botão de Refazer */}
-              {hasAnswered && (
-                <div
-                  className={cn(
-                    "rounded-xl p-4 text-sm leading-relaxed border space-y-2.5 mt-4",
-                    isCorrect ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 font-bold">
-                      {isCorrect ? (
-                        <span className="text-emerald-500 flex items-center gap-1.5">
-                          <CheckCircle2 className="size-4" /> ✓ RESPOSTA CORRETA!
-                        </span>
-                      ) : (
-                        <span className="text-amber-500 flex items-center gap-1.5">
-                          <XCircle className="size-4" /> ✗ RESPOSTA INCORRETA. Gabarito: Letra{" "}
-                          {String.fromCharCode(65 + q.correct_index)}
-                        </span>
-                      )}
-                    </div>
-
-                    <button
-                      onClick={() => handleRetry(q.id)}
-                      className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline font-semibold"
-                    >
-                      <RotateCcw className="size-3.5" /> Refazer questão
-                    </button>
-                  </div>
-
-                  {q.explanation && (
-                    <p className="text-xs md:text-sm text-muted-foreground pt-1 border-t border-border/50">
-                      <strong>Comentário do Professor Jhon:</strong> {q.explanation}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
+            <QuestionCard
+              key={q.id}
+              question={q}
+              questionNumber={qIndex + 1}
+              userSelectedIndex={currentSelectedIndex}
+              isFavorited={favoritedIds.has(q.id)}
+              onToggleFavorite={() => toggleFavorite(q)}
+              onAnswer={(optIdx, isCorrect) => {
+                setSelectedAnswers((prev) => ({ ...prev, [q.id]: optIdx }));
+                recordAttemptMutation.mutate({ qId: q.id, optIndex: optIdx, isCorrect });
+              }}
+              onRetry={() => {
+                setSelectedAnswers((prev) => {
+                  const next = { ...prev };
+                  delete next[q.id];
+                  return next;
+                });
+              }}
+            />
           );
         })}
 
