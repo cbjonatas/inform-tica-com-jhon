@@ -2,6 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import {
   BookOpen,
+  FolderPlus,
   GraduationCap,
   LayoutDashboard,
   ListChecks,
@@ -75,6 +76,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Settings className="size-4" />
             Painel do professor
+          </Link>
+          <Link
+            to="/admin/modulos"
+            onClick={() => setOpen(false)}
+            activeProps={{ className: "bg-secondary text-foreground" }}
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <FolderPlus className="size-4" />
+            Módulos
           </Link>
           <Link
             to="/admin/aulas/nova"
