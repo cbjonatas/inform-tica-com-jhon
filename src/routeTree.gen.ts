@@ -20,9 +20,13 @@ import { Route as AuthenticatedCursoIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedCursoModuloRouteImport } from './routes/_authenticated/curso.modulo.$moduloId'
 import { Route as AuthenticatedCursoAulaRouteImport } from './routes/_authenticated/curso.aula.$aulaId'
 import { Route as AuthenticatedQuestoesRouteImport } from './routes/_authenticated/questoes'
+import { Route as AuthenticatedQuestoesIaRouteImport } from './routes/_authenticated/questoes.ia'
+import { Route as AuthenticatedMateriaisRouteImport } from './routes/_authenticated/materiais'
+import { Route as AuthenticatedFavoritosRouteImport } from './routes/_authenticated/favoritos'
 import { Route as AuthenticatedIaRouteImport } from './routes/_authenticated/ia'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as AuthenticatedAdminModulosRouteImport } from './routes/_authenticated/admin.modulos'
+import { Route as AuthenticatedAdminAulasIndexRouteImport } from './routes/_authenticated/admin.aulas.index'
 import { Route as AuthenticatedAdminAulasNovaRouteImport } from './routes/_authenticated/admin.aulas.nova'
 
 const IndexRoute = IndexRouteImport.update({
@@ -79,6 +83,21 @@ const AuthenticatedQuestoesRoute = AuthenticatedQuestoesRouteImport.update({
   path: '/questoes',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedQuestoesIaRoute = AuthenticatedQuestoesIaRouteImport.update({
+  id: '/questoes/ia',
+  path: '/questoes/ia',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedMateriaisRoute = AuthenticatedMateriaisRouteImport.update({
+  id: '/materiais',
+  path: '/materiais',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedFavoritosRoute = AuthenticatedFavoritosRouteImport.update({
+  id: '/favoritos',
+  path: '/favoritos',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedIaRoute = AuthenticatedIaRouteImport.update({
   id: '/ia',
   path: '/ia',
@@ -92,6 +111,11 @@ const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
 const AuthenticatedAdminModulosRoute = AuthenticatedAdminModulosRouteImport.update({
   id: '/admin/modulos',
   path: '/admin/modulos',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAdminAulasIndexRoute = AuthenticatedAdminAulasIndexRouteImport.update({
+  id: '/admin/aulas/',
+  path: '/admin/aulas/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAdminAulasNovaRoute = AuthenticatedAdminAulasNovaRouteImport.update({
@@ -111,9 +135,13 @@ export interface FileRoutesByFullPath {
   '/curso/modulo/$moduloId': typeof AuthenticatedCursoModuloRoute
   '/curso/aula/$aulaId': typeof AuthenticatedCursoAulaRoute
   '/questoes': typeof AuthenticatedQuestoesRoute
+  '/questoes/ia': typeof AuthenticatedQuestoesIaRoute
+  '/materiais': typeof AuthenticatedMateriaisRoute
+  '/favoritos': typeof AuthenticatedFavoritosRoute
   '/ia': typeof AuthenticatedIaRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/admin/modulos': typeof AuthenticatedAdminModulosRoute
+  '/admin/aulas/': typeof AuthenticatedAdminAulasIndexRoute
   '/admin/aulas/nova': typeof AuthenticatedAdminAulasNovaRoute
 }
 export interface FileRoutesByTo {
@@ -127,9 +155,13 @@ export interface FileRoutesByTo {
   '/curso/modulo/$moduloId': typeof AuthenticatedCursoModuloRoute
   '/curso/aula/$aulaId': typeof AuthenticatedCursoAulaRoute
   '/questoes': typeof AuthenticatedQuestoesRoute
+  '/questoes/ia': typeof AuthenticatedQuestoesIaRoute
+  '/materiais': typeof AuthenticatedMateriaisRoute
+  '/favoritos': typeof AuthenticatedFavoritosRoute
   '/ia': typeof AuthenticatedIaRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/admin/modulos': typeof AuthenticatedAdminModulosRoute
+  '/admin/aulas': typeof AuthenticatedAdminAulasIndexRoute
   '/admin/aulas/nova': typeof AuthenticatedAdminAulasNovaRoute
 }
 export interface FileRoutesById {
@@ -145,9 +177,13 @@ export interface FileRoutesById {
   '/_authenticated/curso/modulo/$moduloId': typeof AuthenticatedCursoModuloRoute
   '/_authenticated/curso/aula/$aulaId': typeof AuthenticatedCursoAulaRoute
   '/_authenticated/questoes': typeof AuthenticatedQuestoesRoute
+  '/_authenticated/questoes/ia': typeof AuthenticatedQuestoesIaRoute
+  '/_authenticated/materiais': typeof AuthenticatedMateriaisRoute
+  '/_authenticated/favoritos': typeof AuthenticatedFavoritosRoute
   '/_authenticated/ia': typeof AuthenticatedIaRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/admin/modulos': typeof AuthenticatedAdminModulosRoute
+  '/_authenticated/admin/aulas/': typeof AuthenticatedAdminAulasIndexRoute
   '/_authenticated/admin/aulas/nova': typeof AuthenticatedAdminAulasNovaRoute
 }
 export interface FileRouteTypes {
@@ -163,9 +199,13 @@ export interface FileRouteTypes {
     | '/curso/modulo/$moduloId'
     | '/curso/aula/$aulaId'
     | '/questoes'
+    | '/questoes/ia'
+    | '/materiais'
+    | '/favoritos'
     | '/ia'
     | '/admin/'
     | '/admin/modulos'
+    | '/admin/aulas/'
     | '/admin/aulas/nova'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -179,9 +219,13 @@ export interface FileRouteTypes {
     | '/curso/modulo/$moduloId'
     | '/curso/aula/$aulaId'
     | '/questoes'
+    | '/questoes/ia'
+    | '/materiais'
+    | '/favoritos'
     | '/ia'
     | '/admin'
     | '/admin/modulos'
+    | '/admin/aulas'
     | '/admin/aulas/nova'
   id:
     | '__root__'
@@ -196,9 +240,13 @@ export interface FileRouteTypes {
     | '/_authenticated/curso/modulo/$moduloId'
     | '/_authenticated/curso/aula/$aulaId'
     | '/_authenticated/questoes'
+    | '/_authenticated/questoes/ia'
+    | '/_authenticated/materiais'
+    | '/_authenticated/favoritos'
     | '/_authenticated/ia'
     | '/_authenticated/admin/'
     | '/_authenticated/admin/modulos'
+    | '/_authenticated/admin/aulas/'
     | '/_authenticated/admin/aulas/nova'
   fileRoutesById: FileRoutesById
 }
@@ -290,6 +338,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedQuestoesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/questoes/ia': {
+      id: '/_authenticated/questoes/ia'
+      path: '/questoes/ia'
+      fullPath: '/questoes/ia'
+      preLoaderRoute: typeof AuthenticatedQuestoesIaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/materiais': {
+      id: '/_authenticated/materiais'
+      path: '/materiais'
+      fullPath: '/materiais'
+      preLoaderRoute: typeof AuthenticatedMateriaisRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/favoritos': {
+      id: '/_authenticated/favoritos'
+      path: '/favoritos'
+      fullPath: '/favoritos'
+      preLoaderRoute: typeof AuthenticatedFavoritosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/ia': {
       id: '/_authenticated/ia'
       path: '/ia'
@@ -311,6 +380,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminModulosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/aulas/': {
+      id: '/_authenticated/admin/aulas/'
+      path: '/admin/aulas'
+      fullPath: '/admin/aulas/'
+      preLoaderRoute: typeof AuthenticatedAdminAulasIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/admin/aulas/nova': {
       id: '/_authenticated/admin/aulas/nova'
       path: '/admin/aulas/nova'
@@ -327,9 +403,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCursoModuloRoute: typeof AuthenticatedCursoModuloRoute
   AuthenticatedCursoAulaRoute: typeof AuthenticatedCursoAulaRoute
   AuthenticatedQuestoesRoute: typeof AuthenticatedQuestoesRoute
+  AuthenticatedQuestoesIaRoute: typeof AuthenticatedQuestoesIaRoute
+  AuthenticatedMateriaisRoute: typeof AuthenticatedMateriaisRoute
+  AuthenticatedFavoritosRoute: typeof AuthenticatedFavoritosRoute
   AuthenticatedIaRoute: typeof AuthenticatedIaRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
   AuthenticatedAdminModulosRoute: typeof AuthenticatedAdminModulosRoute
+  AuthenticatedAdminAulasIndexRoute: typeof AuthenticatedAdminAulasIndexRoute
   AuthenticatedAdminAulasNovaRoute: typeof AuthenticatedAdminAulasNovaRoute
 }
 
@@ -339,9 +419,13 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCursoModuloRoute: AuthenticatedCursoModuloRoute,
   AuthenticatedCursoAulaRoute: AuthenticatedCursoAulaRoute,
   AuthenticatedQuestoesRoute: AuthenticatedQuestoesRoute,
+  AuthenticatedQuestoesIaRoute: AuthenticatedQuestoesIaRoute,
+  AuthenticatedMateriaisRoute: AuthenticatedMateriaisRoute,
+  AuthenticatedFavoritosRoute: AuthenticatedFavoritosRoute,
   AuthenticatedIaRoute: AuthenticatedIaRoute,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
   AuthenticatedAdminModulosRoute: AuthenticatedAdminModulosRoute,
+  AuthenticatedAdminAulasIndexRoute: AuthenticatedAdminAulasIndexRoute,
   AuthenticatedAdminAulasNovaRoute: AuthenticatedAdminAulasNovaRoute,
 }
 

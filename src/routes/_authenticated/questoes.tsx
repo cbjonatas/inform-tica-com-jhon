@@ -1,7 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { CheckCircle2, Filter, HelpCircle, ListChecks, RotateCcw, XCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Filter,
+  HelpCircle,
+  RotateCcw,
+  Sparkles,
+  Star,
+  XCircle,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -10,29 +19,38 @@ export const Route = createFileRoute("/_authenticated/questoes")({
   head: () => ({
     meta: [
       { title: "Banco de Questões — Informática com Jhon" },
-      { name: "description", content: "Resolva questões de informática comentadas das principais bancas de concursos." },
+      { name: "description", content: "Resolva questões de informática comentadas e revise suas questões erradas." },
     ],
   }),
   component: QuestoesPage,
 });
 
+type ViewMode = "todas" | "erradas" | "favoritas";
+
 function QuestoesPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  const [viewMode, setViewMode] = useState<ViewMode>("todas");
   const [selectedModule, setSelectedModule] = useState<string>("all");
   const [selectedBanca, setSelectedBanca] = useState<string>("all");
+  const [selectedDifficulty, setSelectedDifficulty] = useState<string>("all");
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
+  const [favoritedIds, setFavoritedIds] = useState<Set<string>>(new Set());
 
   const { data, isLoading } = useQuery({
-    queryKey: ["questoes_page", user?.id],
+    queryKey: ["questoes_full_page", user?.id],
     enabled: Boolean(user?.id),
     queryFn: async () => {
-      const [modulesRes, questionsRes, attemptsRes] = await Promise.all([
+      const [modulesRes, questionsRes, attemptsRes, favsRes] = await Promise.all([
         supabase.from("modules").select("id, title").order("position"),
         supabase.from("questions").select("*, modules(title)").order("created_at", { ascending: false }),
-        supabase.from("question_attempts").select("question_id, selected_index, is_correct, created_at").eq("user_id", user?.id || ""),
+        supabase.from("question_attempts").select("question_id, selected_index, is_correct, created_at").eq("user_id", user?.id || "").order("created_at", { ascending: false }),
+        supabase.from("favorites").select("item_id").eq("item_type", "question").eq("user_id", user?.id || ""),
       ]);
+
+      const favSet = new Set((favsRes.data ?? []).map((f) => f.item_id));
+      setFavoritedIds(favSet);
 
       return {
         modules: modulesRes.data ?? [],
@@ -53,28 +71,70 @@ function QuestoesPage() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["questoes_page"] });
+      queryClient.invalidateQueries({ queryKey: ["questoes_full_page"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
+
+  const toggleFavorite = async (q: any) => {
+    if (!user?.id) return;
+    const isFav = favoritedIds.has(q.id);
+
+    if (isFav) {
+      await supabase.from("favorites").delete().eq("user_id", user.id).eq("item_type", "question").eq("item_id", q.id);
+      setFavoritedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(q.id);
+        return next;
+      });
+    } else {
+      await supabase.from("favorites").insert({
+        user_id: user.id,
+        item_type: "question",
+        item_id: q.id,
+        title: q.statement.slice(0, 70) + "...",
+        subtitle: `${q.banca || "Banca"} ${q.ano || ""}`,
+      });
+      setFavoritedIds((prev) => {
+        const next = new Set(prev);
+        next.add(q.id);
+        return next;
+      });
+    }
+  };
 
   const modules = data?.modules ?? [];
   const allQuestions = data?.questions ?? [];
   const attempts = data?.attempts ?? [];
 
-  // Criar mapa das últimas tentativas
-  const attemptsMap = new Map<string, { selected_index: number; is_correct: boolean }>();
+  // Mapa com a tentativa mais recente de cada questão
+  const latestAttemptMap = new Map<string, { selected_index: number; is_correct: boolean }>();
   attempts.forEach((a) => {
-    attemptsMap.set(a.question_id, { selected_index: a.selected_index, is_correct: a.is_correct });
+    if (a.question_id && !latestAttemptMap.has(a.question_id)) {
+      latestAttemptMap.set(a.question_id, { selected_index: a.selected_index, is_correct: a.is_correct });
+    }
   });
 
-  // Bancas únicas disponíveis
+  // Conjunto de questões erradas pelo aluno
+  const wrongQuestionIds = new Set(
+    Array.from(latestAttemptMap.entries())
+      .filter(([_, att]) => !att.is_correct)
+      .map(([id]) => id)
+  );
+
   const bancas = Array.from(new Set(allQuestions.map((q) => q.banca).filter(Boolean)));
 
-  // Filtragem
+  // Filtragem de questões
   const filteredQuestions = allQuestions.filter((q) => {
+    // Modo de visualização
+    if (viewMode === "erradas" && !wrongQuestionIds.has(q.id)) return false;
+    if (viewMode === "favoritas" && !favoritedIds.has(q.id)) return false;
+
+    // Filtros secundários
     if (selectedModule !== "all" && q.module_id !== selectedModule) return false;
     if (selectedBanca !== "all" && q.banca !== selectedBanca) return false;
+    if (selectedDifficulty !== "all" && (q.difficulty || "medio") !== selectedDifficulty) return false;
+
     return true;
   });
 
@@ -89,24 +149,41 @@ function QuestoesPage() {
     recordAttemptMutation.mutate({ qId, optIndex, isCorrect });
   };
 
+  const handleRetry = (qId: string) => {
+    setSelectedAnswers((prev) => {
+      const next = { ...prev };
+      delete next[qId];
+      return next;
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <p className="text-muted-foreground animate-pulse">Carregando questões...</p>
+        <p className="text-muted-foreground animate-pulse">Carregando banco de questões...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      {/* Cabeçalho */}
-      <header>
-        <p className="text-xs font-semibold tracking-[0.25em] text-accent uppercase">TREINAMENTO INTENSIVO</p>
-        <h1 className="mt-1 text-3xl font-bold font-display md:text-4xl">Banco de Questões Comentadas</h1>
-        <p className="mt-1 text-muted-foreground">
-          Pratique com questões reais das principais bancas de concursos (FGV, Cebraspe, FCC).
-        </p>
-      </header>
+    <div className="space-y-8 max-w-5xl mx-auto">
+      {/* Topo */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold tracking-[0.25em] text-accent uppercase">TREINAMENTO INTENSIVO</p>
+          <h1 className="mt-1 text-3xl font-bold font-display md:text-4xl">Banco de Questões Comentadas</h1>
+          <p className="mt-1 text-muted-foreground">
+            Resolva questões de provas reais e revise seus pontos fracos.
+          </p>
+        </div>
+
+        <Link
+          to="/questoes/ia"
+          className="glow-primary inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground self-start sm:self-auto transition-transform hover:scale-[1.02]"
+        >
+          <Sparkles className="size-4" /> Gerador de Questões IA
+        </Link>
+      </div>
 
       {/* Cards de Métricas */}
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -116,27 +193,57 @@ function QuestoesPage() {
         </div>
         <div className="panel p-4">
           <p className="font-display text-2xl font-bold">{totalRespondidas}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Respondidas por você</p>
+          <p className="mt-1 text-xs text-muted-foreground">Tentativas registradas</p>
         </div>
         <div className="panel p-4">
           <p className="font-display text-2xl font-bold text-emerald-500">{totalAcertos}</p>
           <p className="mt-1 text-xs text-muted-foreground">Acertos totais</p>
         </div>
         <div className="panel p-4">
-          <p className="font-display text-2xl font-bold text-primary">{taxaAcerto}%</p>
-          <p className="mt-1 text-xs text-muted-foreground">Taxa de rendimento</p>
+          <p className="font-display text-2xl font-bold text-red-500">{wrongQuestionIds.size}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Questões a refazer</p>
         </div>
       </section>
 
+      {/* Seletor de Modo: Todas / Minhas Questões Erradas / Favoritas */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
+        {[
+          { id: "todas", label: "Todas as Questões", count: allQuestions.length },
+          { id: "erradas", label: "MINHAS QUESTÕES ERRADAS", count: wrongQuestionIds.size, icon: AlertTriangle },
+          { id: "favoritas", label: "Favoritas", count: favoritedIds.size, icon: Star },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setViewMode(tab.id as ViewMode)}
+            className={cn(
+              "flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-all border",
+              viewMode === tab.id
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-secondary text-muted-foreground border-border hover:text-foreground"
+            )}
+          >
+            {tab.icon && <tab.icon className="size-3.5" />}
+            <span>{tab.label}</span>
+            <span
+              className={cn(
+                "rounded-full px-1.5 py-0.2 text-[10px]",
+                viewMode === tab.id ? "bg-white/20 text-white" : "bg-secondary/80 text-muted-foreground"
+              )}
+            >
+              {tab.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* Barra de Filtros */}
-      <div className="panel p-4 md:p-5 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+      <div className="panel p-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
           <Filter className="size-4 text-accent" />
-          <span>Filtrar por:</span>
+          <span>Filtros:</span>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Filtro de Módulo */}
           <select
             value={selectedModule}
             onChange={(e) => setSelectedModule(e.target.value)}
@@ -150,7 +257,6 @@ function QuestoesPage() {
             ))}
           </select>
 
-          {/* Filtro de Banca */}
           <select
             value={selectedBanca}
             onChange={(e) => setSelectedBanca(e.target.value)}
@@ -164,15 +270,27 @@ function QuestoesPage() {
             ))}
           </select>
 
-          {(selectedModule !== "all" || selectedBanca !== "all") && (
+          <select
+            value={selectedDifficulty}
+            onChange={(e) => setSelectedDifficulty(e.target.value)}
+            className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium focus:border-primary focus:outline-none"
+          >
+            <option value="all">Todas as Dificuldades</option>
+            <option value="facil">Fácil</option>
+            <option value="medio">Médio</option>
+            <option value="dificil">Difícil</option>
+          </select>
+
+          {(selectedModule !== "all" || selectedBanca !== "all" || selectedDifficulty !== "all") && (
             <button
               onClick={() => {
                 setSelectedModule("all");
                 setSelectedBanca("all");
+                setSelectedDifficulty("all");
               }}
               className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
             >
-              <RotateCcw className="size-3" /> Limpar filtros
+              <RotateCcw className="size-3" /> Limpar
             </button>
           )}
         </div>
@@ -182,14 +300,15 @@ function QuestoesPage() {
       <section className="space-y-6">
         {filteredQuestions.map((q, qIndex) => {
           const options = Array.isArray(q.options) ? (q.options as string[]) : [];
-          const savedAttempt = attemptsMap.get(q.id);
+          const savedAttempt = latestAttemptMap.get(q.id);
           const currentSelectedIndex = selectedAnswers[q.id] ?? savedAttempt?.selected_index;
           const hasAnswered = currentSelectedIndex !== undefined;
           const isCorrect = currentSelectedIndex === q.correct_index;
+          const isFav = favoritedIds.has(q.id);
 
           return (
             <div key={q.id} className="panel p-6 space-y-4">
-              {/* Header da questão */}
+              {/* Header da questão com botão de favoritar */}
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs border-b border-border/50 pb-3">
                 <div className="flex items-center gap-2 font-semibold">
                   <span className="text-primary font-bold">QUESTÃO #{qIndex + 1}</span>
@@ -199,10 +318,25 @@ function QuestoesPage() {
                     </span>
                   )}
                   {q.ano && <span className="text-muted-foreground">{q.ano}</span>}
+                  {q.difficulty && (
+                    <span className="rounded bg-accent/10 px-2 py-0.5 text-accent text-[10px] uppercase font-bold">
+                      {q.difficulty}
+                    </span>
+                  )}
                 </div>
-                {q.modules?.title && (
-                  <span className="text-xs text-muted-foreground truncate max-w-xs">{q.modules.title}</span>
-                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => toggleFavorite(q)}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-colors",
+                      isFav ? "text-amber-400 bg-amber-400/10" : "text-muted-foreground hover:text-foreground"
+                    )}
+                    title={isFav ? "Remover dos favoritos" : "Salvar nos favoritos"}
+                  >
+                    <Star className={cn("size-4", isFav && "fill-current")} />
+                  </button>
+                </div>
               </div>
 
               {/* Enunciado */}
@@ -244,30 +378,38 @@ function QuestoesPage() {
                 })}
               </div>
 
-              {/* Feedback e Comentário */}
+              {/* Feedback, Gabarito, Comentário e Botão de Refazer */}
               {hasAnswered && (
                 <div
                   className={cn(
-                    "rounded-xl p-4 text-sm leading-relaxed border space-y-2 mt-4",
-                    isCorrect
-                      ? "border-emerald-500/30 bg-emerald-500/5"
-                      : "border-amber-500/30 bg-amber-500/5"
+                    "rounded-xl p-4 text-sm leading-relaxed border space-y-2.5 mt-4",
+                    isCorrect ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"
                   )}
                 >
-                  <div className="flex items-center gap-2 font-bold">
-                    {isCorrect ? (
-                      <span className="text-emerald-500 flex items-center gap-1.5">
-                        <CheckCircle2 className="size-4" /> Resposta correta!
-                      </span>
-                    ) : (
-                      <span className="text-amber-500 flex items-center gap-1.5">
-                        <XCircle className="size-4" /> Resposta incorreta. Gabarito oficial: Letra{" "}
-                        {String.fromCharCode(65 + q.correct_index)}
-                      </span>
-                    )}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold">
+                      {isCorrect ? (
+                        <span className="text-emerald-500 flex items-center gap-1.5">
+                          <CheckCircle2 className="size-4" /> ✓ RESPOSTA CORRETA!
+                        </span>
+                      ) : (
+                        <span className="text-amber-500 flex items-center gap-1.5">
+                          <XCircle className="size-4" /> ✗ RESPOSTA INCORRETA. Gabarito: Letra{" "}
+                          {String.fromCharCode(65 + q.correct_index)}
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => handleRetry(q.id)}
+                      className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline font-semibold"
+                    >
+                      <RotateCcw className="size-3.5" /> Refazer questão
+                    </button>
                   </div>
+
                   {q.explanation && (
-                    <p className="text-xs md:text-sm text-muted-foreground">
+                    <p className="text-xs md:text-sm text-muted-foreground pt-1 border-t border-border/50">
                       <strong>Comentário do Professor Jhon:</strong> {q.explanation}
                     </p>
                   )}
@@ -280,8 +422,12 @@ function QuestoesPage() {
         {filteredQuestions.length === 0 && (
           <div className="panel p-12 text-center text-muted-foreground space-y-3">
             <HelpCircle className="size-10 mx-auto text-muted-foreground/50" />
-            <p className="text-base font-semibold">Nenhuma questão encontrada com os filtros selecionados.</p>
-            <p className="text-xs">Tente selecionar outro módulo ou banca examinadora.</p>
+            <p className="text-base font-semibold">Nenhuma questão encontrada com os filtros atuais.</p>
+            {viewMode === "erradas" && (
+              <p className="text-xs text-emerald-500 font-medium">
+                Parabéns! Você não possui nenhuma questão errada pendente de revisão.
+              </p>
+            )}
           </div>
         )}
       </section>
