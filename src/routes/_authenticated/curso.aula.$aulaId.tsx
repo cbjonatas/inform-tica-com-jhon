@@ -86,6 +86,16 @@ function AulaDetailPage() {
       const lesson = lessonRes.data;
       if (!lesson) return null;
 
+      let course = null;
+      if (lesson.modules?.course_id) {
+        const courseRes = await supabase
+          .from("courses")
+          .select("id, title")
+          .eq("id", lesson.modules.course_id)
+          .maybeSingle();
+        course = courseRes.data;
+      }
+
       const siblingsRes = await supabase
         .from("lessons")
         .select("id, title, position")
@@ -112,6 +122,7 @@ function AulaDetailPage() {
       return {
         lesson,
         module: lesson.modules,
+        course,
         siblings: siblingsRes.data ?? [],
         progress: progressRes.data,
         materials: materialsRes.data ?? [],
@@ -123,6 +134,7 @@ function AulaDetailPage() {
 
   const lesson = data?.lesson;
   const moduleData = data?.module;
+  const courseData = data?.course;
   const siblings = data?.siblings ?? [];
   const progress = data?.progress;
   const questions = data?.questions ?? [];
@@ -147,6 +159,7 @@ function AulaDetailPage() {
       const payload: any = {
         user_id: user.id,
         lesson_id: aulaId,
+        course_id: moduleData?.course_id || null,
         position_seconds: Math.floor(pos),
         updated_at: new Date().toISOString(),
       };
@@ -155,7 +168,9 @@ function AulaDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["aula_detail", aulaId] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-multicourse"] });
+      queryClient.invalidateQueries({ queryKey: ["meus-cursos"] });
+      queryClient.invalidateQueries({ queryKey: ["curso-trilha"] });
     },
   });
 
@@ -266,16 +281,31 @@ function AulaDetailPage() {
       {/* 1. TOPO: Identificação e Navegação (Item 34) */}
       <header className="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+            <Link to="/meus-cursos" className="hover:text-primary transition-colors">
+              Meus Cursos
+            </Link>
+            <span>/</span>
+            {courseData && (
+              <>
+                <Link
+                  to="/curso"
+                  search={{ cursoId: courseData.id }}
+                  className="hover:text-primary transition-colors"
+                >
+                  {courseData.title}
+                </Link>
+                <span>/</span>
+              </>
+            )}
             <Link
               to="/curso/modulo/$moduloId"
               params={{ moduloId: lesson.module_id }}
               className="hover:text-primary transition-colors flex items-center gap-1"
             >
-              <ArrowLeft className="size-3.5" />
               {moduleData?.title || "Módulo"}
             </Link>
-            <span>•</span>
+            <span>/</span>
             <span className="text-accent">Aula {lesson.position}</span>
           </div>
 

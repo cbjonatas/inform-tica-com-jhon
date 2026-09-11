@@ -1,15 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Edit, FolderPlus, GripVertical, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Edit, FolderPlus, GraduationCap, GripVertical, Plus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_authenticated/admin/modulos")({
   head: () => ({
     meta: [
       { title: "Gerenciar Módulos — Painel do Professor" },
-      { name: "description", content: "Criar, editar e organizar módulos do curso." },
+      { name: "description", content: "Criar, editar e organizar módulos por curso de forma independente." },
     ],
   }),
   component: AdminModulosPage,
@@ -19,34 +20,61 @@ function AdminModulosPage() {
   const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
 
+  const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const { data: modules = [], isLoading } = useQuery({
-    queryKey: ["admin_modules"],
+  // 1. Buscar todos os cursos
+  const { data: courses = [] } = useQuery({
+    queryKey: ["admin_courses_for_modules"],
     enabled: isAdmin,
     queryFn: async () => {
-      const res = await supabase.from("modules").select("*").order("position");
+      const res = await supabase.from("courses").select("id, title, category").order("position");
+      const list = res.data ?? [];
+      if (list.length > 0 && !selectedCourseId) {
+        setSelectedCourseId(list[0].id);
+      }
+      return list;
+    },
+  });
+
+  const activeCourseId = selectedCourseId || courses[0]?.id || "";
+
+  // 2. Buscar módulos do curso ativo
+  const { data: modules = [], isLoading } = useQuery({
+    queryKey: ["admin_modules", activeCourseId],
+    enabled: isAdmin && Boolean(activeCourseId),
+    queryFn: async () => {
+      const res = await supabase
+        .from("modules")
+        .select("*")
+        .eq("course_id", activeCourseId)
+        .order("position");
       return res.data ?? [];
     },
   });
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!title.trim()) return;
+      if (!title.trim() || !activeCourseId) return;
 
       if (editingId) {
         await supabase
           .from("modules")
-          .update({ title: title.trim(), description: description.trim() })
+          .update({
+            title: title.trim(),
+            description: description.trim(),
+            course_id: activeCourseId,
+          })
           .eq("id", editingId);
       } else {
         const nextPosition = modules.length > 0 ? Math.max(...modules.map((m) => m.position)) + 1 : 1;
         await supabase
           .from("modules")
           .insert({
+            course_id: activeCourseId,
             title: title.trim(),
             description: description.trim(),
             position: nextPosition,
@@ -55,12 +83,12 @@ function AdminModulosPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin_modules"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["curso"] });
+      queryClient.invalidateQueries({ queryKey: ["curso-trilha"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-multicourse"] });
       setTitle("");
       setDescription("");
       setEditingId(null);
-      setFeedback("Módulo salvo com sucesso!");
+      setFeedback("Módulo salvo com sucesso no curso selecionado!");
       setTimeout(() => setFeedback(null), 3000);
     },
   });
@@ -72,8 +100,7 @@ function AdminModulosPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin_modules"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["curso"] });
+      queryClient.invalidateQueries({ queryKey: ["curso-trilha"] });
     },
   });
 
@@ -98,19 +125,44 @@ function AdminModulosPage() {
     );
   }
 
+  const currentCourse = courses.find((c) => c.id === activeCourseId);
+
   return (
-    <div className="space-y-8 max-w-4xl mx-auto">
-      <div>
-        <Link
-          to="/admin"
-          className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="size-3.5" /> Voltar ao painel administrativo
-        </Link>
-        <h1 className="mt-2 text-3xl font-bold font-display">Gerenciar Módulos do Curso</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Crie novos tópicos e reordene os módulos sem precisar alterar o código.
-        </p>
+    <div className="space-y-8 max-w-4xl mx-auto pb-12">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-5">
+        <div>
+          <Link
+            to="/admin"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="size-3.5" /> Voltar ao painel administrativo
+          </Link>
+          <h1 className="mt-2 text-2xl md:text-3xl font-bold font-display">Gerenciar Módulos por Curso</h1>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Organize a estrutura curricular de cada curso de forma totalmente isolada.
+          </p>
+        </div>
+
+        {/* Seletor de Curso para os Módulos */}
+        <div className="flex items-center gap-2">
+          <GraduationCap className="size-4 text-primary" />
+          <select
+            value={activeCourseId}
+            onChange={(e) => {
+              setSelectedCourseId(e.target.value);
+              setEditingId(null);
+              setTitle("");
+              setDescription("");
+            }}
+            className="rounded-xl border border-primary/50 bg-secondary/80 px-3 py-2 text-xs font-bold text-foreground focus:border-primary focus:outline-none"
+          >
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {feedback && (
@@ -130,7 +182,7 @@ function AdminModulosPage() {
         <div className="flex items-center justify-between border-b border-border pb-3">
           <h2 className="text-base font-bold font-display flex items-center gap-2">
             <FolderPlus className="size-4 text-primary" />
-            {editingId ? "Editar Módulo" : "Cadastrar Novo Módulo"}
+            {editingId ? "Editar Módulo" : `Cadastrar Novo Módulo em: ${currentCourse?.title || "Curso"}`}
           </h2>
           {editingId && (
             <button
@@ -178,80 +230,76 @@ function AdminModulosPage() {
 
         <button
           type="submit"
-          disabled={saveMutation.isPending}
-          className="glow-primary rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition-transform hover:scale-[1.01] disabled:opacity-50"
+          disabled={!title.trim() || saveMutation.isPending}
+          className="glow-primary inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground transition-opacity hover:opacity-95 disabled:opacity-50"
         >
-          {editingId ? "Salvar Alterações" : "Criar Módulo"}
+          <Plus className="size-4" />
+          {editingId ? "Atualizar Módulo" : "Adicionar Módulo ao Curso"}
         </button>
       </form>
 
-      {/* Lista de Módulos Existentes */}
-      <section className="space-y-4">
-        <h2 className="text-lg font-bold font-display">Módulos Cadastrados ({modules.length})</h2>
+      {/* Lista de Módulos */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold font-display">
+            Módulos de {currentCourse?.title} ({modules.length})
+          </h2>
+        </div>
 
-        <div className="space-y-3">
-          {modules.map((m, index) => (
-            <div
-              key={m.id}
-              className="panel flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 md:p-5"
-            >
-              <div className="flex items-start gap-3">
-                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary font-mono text-xs font-bold text-muted-foreground">
-                  {m.position}
-                </span>
-                <div>
-                  <h3 className="font-semibold text-foreground text-base">{m.title}</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{m.description}</p>
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="panel h-16 animate-pulse bg-secondary/30" />
+            ))}
+          </div>
+        ) : modules.length === 0 ? (
+          <div className="panel p-8 text-center text-muted-foreground text-xs">
+            Nenhum módulo cadastrado para este curso ainda. Preencha o formulário acima para adicionar o primeiro módulo.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {modules.map((m, idx) => (
+              <div
+                key={m.id}
+                className="panel flex items-center justify-between p-4 transition-colors hover:border-primary/50"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary text-xs font-bold text-muted-foreground">
+                    {idx + 1}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-sm truncate text-foreground">{m.title}</h3>
+                    <p className="text-xs text-muted-foreground truncate">{m.description || "Sem descrição"}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setEditingId(m.id);
+                      setTitle(m.title);
+                      setDescription(m.description || "");
+                    }}
+                    className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                    title="Editar módulo"
+                  >
+                    <Edit className="size-4" />
+                  </button>
+
+                  <button
+                    onClick={() => deleteMutation.mutate(m.id)}
+                    className="p-2 rounded-lg text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                    title="Excluir módulo"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2 self-end sm:self-center">
-                {/* Alterar posição rápida */}
-                <button
-                  onClick={() => reorderMutation.mutate({ id: m.id, newPosition: Math.max(1, m.position - 1) })}
-                  disabled={m.position <= 1}
-                  className="rounded-lg border border-border px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-30"
-                  title="Mover para cima"
-                >
-                  ▲
-                </button>
-                <button
-                  onClick={() => reorderMutation.mutate({ id: m.id, newPosition: m.position + 1 })}
-                  className="rounded-lg border border-border px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
-                  title="Mover para baixo"
-                >
-                  ▼
-                </button>
-
-                <button
-                  onClick={() => {
-                    setEditingId(m.id);
-                    setTitle(m.title);
-                    setDescription(m.description);
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className="flex items-center gap-1 rounded-lg border border-border bg-secondary/50 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary"
-                >
-                  <Edit className="size-3.5" /> Editar
-                </button>
-
-                <button
-                  onClick={() => deleteMutation.mutate(m.id)}
-                  className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-500/20"
-                >
-                  <Trash2 className="size-3.5" /> Excluir
-                </button>
-              </div>
-            </div>
-          ))}
-
-          {modules.length === 0 && !isLoading && (
-            <div className="panel p-8 text-center text-sm text-muted-foreground">
-              Nenhum módulo cadastrado ainda. Utilize o formulário acima para criar o primeiro módulo!
-            </div>
-          )}
-        </div>
-      </section>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+export default AdminModulosPage;

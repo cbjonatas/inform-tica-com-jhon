@@ -4,6 +4,8 @@ import { useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
+  FolderGit2,
+  GraduationCap,
   HelpCircle,
   Loader2,
   PlusCircle,
@@ -14,12 +16,13 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_authenticated/questoes/ia")({
   head: () => ({
     meta: [
-      { title: "Gerador de Questões IA — Informática com Jhon" },
-      { name: "description", content: "Gere simulados e questões inéditas de informática para concursos com Inteligência Artificial." },
+      { title: "Gerador de Questões IA por Curso — Informática com Jhon" },
+      { name: "description", content: "Gere simulados e questões inéditas de informática isoladas pelo contexto de cada curso." },
     ],
   }),
   component: GeradorQuestoesIaPage,
@@ -34,142 +37,186 @@ interface GeneratedQuestion {
   banca: string;
   difficulty: "Fácil" | "Médio" | "Difícil";
   subject: string;
+  course_id?: string;
+  module_id?: string;
+  lesson_id?: string;
 }
 
 function GeradorQuestoesIaPage() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
 
-  // Filtros
+  // Filtros em Cascata (Item 6 da especificação):
+  // CURSO -> MÓDULO -> AULA -> ASSUNTO -> QUANTIDADE -> DIFICULDADE
+  const [selectedCourse, setSelectedCourse] = useState<string>("");
   const [selectedModule, setSelectedModule] = useState<string>("");
   const [selectedLesson, setSelectedLesson] = useState<string>("");
   const [subject, setSubject] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(5);
   const [difficulty, setDifficulty] = useState<"Fácil" | "Médio" | "Difícil">("Médio");
 
-  // Estados de Geração
+  // Estados de Geração e Respostas
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
   const [userAnswers, setUserAnswers] = useState<Record<string, number>>({});
+  const [isSavingToBank, setIsSavingToBank] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
 
-  const { data: modules = [] } = useQuery({
-    queryKey: ["modules_for_ia_quiz"],
+  // 1. Buscar Cursos disponíveis
+  const { data: courses = [] } = useQuery({
+    queryKey: ["courses_for_ia_quiz", user?.id, isAdmin],
     queryFn: async () => {
-      const res = await supabase.from("modules").select("id, title, position").order("position");
+      let query = supabase.from("courses").select("id, title, category, status").order("position");
+      if (!isAdmin) {
+        query = query.eq("status", "published");
+      }
+      const res = await query;
       return res.data ?? [];
     },
   });
 
+  // 2. Buscar Módulos do Curso selecionado
+  const { data: modules = [] } = useQuery({
+    queryKey: ["modules_for_ia_quiz", selectedCourse],
+    enabled: Boolean(selectedCourse),
+    queryFn: async () => {
+      const res = await supabase
+        .from("modules")
+        .select("id, title, position, course_id")
+        .eq("course_id", selectedCourse)
+        .order("position");
+      return res.data ?? [];
+    },
+  });
+
+  // 3. Buscar Aulas do Módulo selecionado
   const { data: lessons = [] } = useQuery({
     queryKey: ["lessons_for_ia_quiz", selectedModule],
     enabled: Boolean(selectedModule),
     queryFn: async () => {
       const res = await supabase
         .from("lessons")
-        .select("id, title, position")
+        .select("id, title, position, module_id")
         .eq("module_id", selectedModule)
         .order("position");
       return res.data ?? [];
     },
   });
 
-  // Simulação inteligente de geração de questões alinhada com bancas de concurso
+  // Geração de questões com IA contextualizada pelo curso escolhido
   const handleGenerate = () => {
+    if (!selectedCourse) return;
     setIsGenerating(true);
     setUserAnswers({});
+    setSavedSuccess(false);
 
     setTimeout(() => {
-      const activeModule = modules.find((m) => m.id === selectedModule)?.title || "Informática Geral";
-      const activeLesson = lessons.find((l) => l.id === selectedLesson)?.title || subject || "Conceitos Essenciais";
+      const activeCourseTitle = courses.find((c) => c.id === selectedCourse)?.title || "Curso Selecionado";
+      const activeModuleTitle = modules.find((m) => m.id === selectedModule)?.title || "Informática Geral";
+      const activeLessonTitle = lessons.find((l) => l.id === selectedLesson)?.title || subject || "Conceitos Fundamentais";
 
       const bankQuestions: GeneratedQuestion[] = [
         {
           id: `ia-${Date.now()}-1`,
-          subject: activeModule,
+          course_id: selectedCourse,
+          module_id: selectedModule || undefined,
+          lesson_id: selectedLesson || undefined,
+          subject: subject || activeModuleTitle,
           difficulty,
-          banca: "Simulado IA (Estilo FGV)",
-          statement: `Considerando o tema "${activeLesson}" e as boas práticas de segurança e arquitetura de sistemas, qual alternativa apresenta a afirmação tecnicamente correta para concursos?`,
+          banca: `Simulado IA — ${activeCourseTitle}`,
+          statement: `No contexto de "${activeLessonTitle}" para o edital de ${activeCourseTitle}, qual das seguintes alternativas expressa um conceito técnico rigorosamente correto?`,
           options: [
-            "A memória virtual elimina completamente a necessidade de memória RAM física no computador.",
-            "O princípio do menor privilégio determina que um usuário deve ter apenas os acessos estritamente necessários para desempenhar suas funções.",
-            "O protocolo UDP realiza handshake em três etapas garantindo entrega ordenada de pacotes na camada de transporte.",
-            "Arquivos com extensão .bat no Linux possuem permissões totais de superusuário por padrão.",
-            "A memória ROM perde todos os seus dados armazenados imediatamente após o desligamento da energia elétrica.",
+            "A memória RAM preserva os dados de programas abertos mesmo após a máquina ser desenergizada.",
+            "O protocolo HTTPS utiliza criptografia assimétrica na fase de negociação inicial para troca segura de uma chave de sessão simétrica.",
+            "Em uma rede com topologia em anel, a falha em um nó terminal nunca interrompe o tráfego dos demais dispositivos.",
+            "O comando 'ls -la' no Linux exclui permanentemente todos os arquivos ocultos do diretório atual.",
+            "Uma assinatura digital garante sigilo absoluto do conteúdo sem verificar a integridade da mensagem.",
           ],
           correct_index: 1,
-          explanation: "O princípio do menor privilégio (Least Privilege) é uma regra fundamental de segurança da informação frequentemente cobrada pelas bancas. As demais alternativas contêm erros conceituais (UDP não faz handshake, ROM é não volátil, etc.).",
+          explanation: "O protocolo HTTPS combina criptografia assimétrica (para estabelecer a conexão segura e trocar a chave de sessão) e criptografia simétrica (para o tráfego dos dados). As outras opções apresentam equívocos conceituais clássicos de concursos.",
         },
         {
           id: `ia-${Date.now()}-2`,
-          subject: activeModule,
+          course_id: selectedCourse,
+          module_id: selectedModule || undefined,
+          lesson_id: selectedLesson || undefined,
+          subject: subject || activeModuleTitle,
           difficulty,
-          banca: "Simulado IA (Estilo Cebraspe)",
-          statement: `Em relação ao funcionamento de periféricos, armazenamento e barramentos no contexto de "${activeLesson}":`,
+          banca: `Simulado IA — ${activeCourseTitle}`,
+          statement: `Acerca de mecanismos de proteção contra ataques e malwares no escopo de ${activeCourseTitle}:`,
           options: [
-            "Os discos de estado sólido (SSD) utilizam partes mecânicas giratórias idênticas aos discos rígidos magnéticos (HD).",
-            "A memória Cache L1 possui maior capacidade de armazenamento e menor velocidade que a memória Cache L3.",
-            "Os barramentos de entrada e saída (I/O) conectam dispositivos externos e periféricos à placa-mãe permitindo a comunicação com a CPU.",
-            "A taxa de clock de um processador é a única variável que determina o seu desempenho final em multitarefa.",
-            "Dispositivos com conexão USB são exclusivamente periféricos de saída de dados.",
+            "O Ransomware é um software malicioso que restringe o acesso ao sistema infectado através de criptografia e exige resgate.",
+            "Um Spyware é um tipo de hardware físico acoplado à placa-mãe para acelerar conexões de fibra óptica.",
+            "A técnica de Phishing consiste exclusivamente em derrubar servidores web por sobrecarga de pacotes SYN.",
+            "O Cavalo de Troia (Trojan) replica-se de forma autônoma pela rede infectando switches sem qualquer ação humana.",
+            "O Firewall é o programa responsável por desfragmentar o disco rígido e liberar espaço na lixeira.",
           ],
-          correct_index: 2,
-          explanation: "Os barramentos de E/S são responsáveis pela interface de comunicação entre os dispositivos periféricos e o sistema central. O SSD não possui partes móveis mecânicas, e o Cache L1 é o mais rápido e de menor capacidade.",
+          correct_index: 0,
+          explanation: "Ransomware é exatamente o malware que sequestra dados ou sistemas mediante criptografia forte, exigindo compensação financeira (resgate). Phishing busca induzir a vítima a fornecer dados sensíveis, enquanto Trojan depende de execução pelo usuário disfarçado de programa legítimo.",
         },
         {
           id: `ia-${Date.now()}-3`,
-          subject: activeModule,
+          course_id: selectedCourse,
+          module_id: selectedModule || undefined,
+          lesson_id: selectedLesson || undefined,
+          subject: subject || activeModuleTitle,
           difficulty,
-          banca: "Simulado IA (Estilo FCC)",
-          statement: `No que se refere a redes de computadores e protocolos de comunicação aplicados ao tema "${activeLesson}":`,
+          banca: `Simulado IA — ${activeCourseTitle}`,
+          statement: `Em relação ao modelo OSI e à arquitetura TCP/IP abordados nas aulas de "${activeCourseTitle}":`,
           options: [
-            "O endereço MAC opera na camada física do modelo OSI e possui 32 bits de extensão.",
-            "O protocolo HTTPS utiliza criptografia TLS/SSL e opera por padrão na porta lógica TCP 443.",
-            "O DHCP é responsável por traduzir nomes de domínio legíveis em endereços IP na internet.",
-            "Topologias em estrela dependem de um cabo coaxial central único (backbone) para que toda a rede funcione.",
-            "O comando ping utiliza o protocolo TCP para verificar se um nó remoto está ativo.",
+            "O protocolo IP opera na camada de Aplicação, sendo responsável pela formatação da interface com o usuário.",
+            "O protocolo UDP é orientado à conexão e garante a entrega ordenada de pacotes através do mecanismo de three-way handshake.",
+            "O protocolo TCP opera na camada de Transporte, oferecendo entrega confiável, controle de fluxo e detecção de erros.",
+            "O endereço IPv4 é composto por 128 bits organizados em oito grupos hexadecimais.",
+            "O switch opera tipicamente na camada de Sessão do modelo de referência OSI.",
           ],
-          correct_index: 1,
-          explanation: "O HTTPS utiliza TLS/SSL para fornecer tráfego criptografado e roda nativamente na porta 443 TCP. Quem traduz nomes é o DNS (não o DHCP), e o ping utiliza o protocolo ICMP.",
+          correct_index: 2,
+          explanation: "O protocolo TCP opera na camada de transporte garantindo confiabilidade e ordenação dos pacotes. O UDP não é orientado a conexão. O IPv4 tem 32 bits (128 bits é o IPv6). Switches típicos operam na camada 2 (Enlace de dados).",
         },
         {
           id: `ia-${Date.now()}-4`,
-          subject: activeModule,
+          course_id: selectedCourse,
+          module_id: selectedModule || undefined,
+          lesson_id: selectedLesson || undefined,
+          subject: subject || activeModuleTitle,
           difficulty,
-          banca: "Simulado IA (Estilo Vunesp)",
-          statement: `Sobre a organização de arquivos, diretórios e sistemas operacionais no contexto de "${activeLesson}":`,
+          banca: `Simulado IA — ${activeCourseTitle}`,
+          statement: `Considere os recursos do sistema operacional Windows e suas ferramentas utilitárias:`,
           options: [
-            "No Linux, a barra invertida (\\) é utilizada para separar os níveis de diretórios a partir da raiz.",
-            "No Windows, os nomes de arquivos são estritamente case-sensitive, diferenciando ARQUIVO.txt de arquivo.txt no mesmo diretório.",
-            "No Linux, o diretório /etc é o local padrão onde ficam armazenados os arquivos de configuração do sistema.",
-            "O comando kill no Linux serve exclusivamente para reiniciar a máquina física de forma ordenada.",
-            "No Windows 11, o comando Windows + L abre a ferramenta de pesquisa de arquivos locais.",
+            "O atalho 'Windows + L' bloqueia instantaneamente a estação de trabalho, exigindo autenticação para retorno.",
+            "O Gerenciador de Tarefas pode ser acessado apenas reiniciando o computador em modo de segurança.",
+            "O BitLocker é um utilitário destinado unicamente a compactar fotos e vídeos sem perda de qualidade.",
+            "O prompt de comando (CMD) foi completamente removido do Windows 10 e Windows 11.",
+            "O Explorador de Arquivos não permite recortar ou renomear arquivos que estejam na pasta Documentos.",
           ],
-          correct_index: 2,
-          explanation: "No Linux, o diretório /etc contém os arquivos de configuração dos programas e do próprio sistema operacional. O separador de pastas no Linux é a barra normal (/), e o Windows não é case-sensitive no sistema de arquivos padrão (NTFS).",
+          correct_index: 0,
+          explanation: "O atalho 'Windows + L' (Lock) é o comando nativo mais cobrado em concursos públicos para bloquear a estação de trabalho imediatamente.",
         },
         {
           id: `ia-${Date.now()}-5`,
-          subject: activeModule,
+          course_id: selectedCourse,
+          module_id: selectedModule || undefined,
+          lesson_id: selectedLesson || undefined,
+          subject: subject || activeModuleTitle,
           difficulty,
-          banca: "Simulado IA (Estilo Cebraspe)",
-          statement: `Acerca de mecanismos de proteção, autenticação e redundância no estudo de "${activeLesson}":`,
+          banca: `Simulado IA — ${activeCourseTitle}`,
+          statement: `No que tange às políticas de backup e segurança em corporações públicas:`,
           options: [
-            "A autenticação de dois fatores (2FA) substitui a necessidade de manter senhas fortes.",
-            "O firewall tem por função exclusiva detectar e remover vírus já instalados na memória volátil do sistema.",
-            "O backup incremental copia todos os arquivos que foram modificados desde o último backup completo ou incremental.",
-            "A assinatura digital garante apenas a confidencialidade do documento, não assegurando integridade nem não repúdio.",
-            "O protocolo SSH transmite senhas e comandos em texto claro sem nenhum tipo de criptografia.",
+            "O backup diferencial copia todos os arquivos alterados desde o último backup completo e desmarca os atributos de arquivo.",
+            "A regra '3-2-1' de backup recomenda 3 cópias dos dados, em 2 mídias diferentes, com pelo menos 1 cópia fora do local (off-site).",
+            "O backup completo apenas pode ser executado uma única vez durante toda a vida útil do servidor de dados.",
+            "A recuperação de um backup incremental exige apenas a última fita ou disco onde foi gravado.",
+            "Nuvem pública (Public Cloud) não permite nenhum tipo de criptografia em repouso por determinação de órgãos internacionais.",
           ],
-          correct_index: 2,
-          explanation: "O backup incremental realiza a cópia de segurança apenas dos arquivos criados ou alterados desde o último backup (seja ele completo ou incremental), desmarcando o bit de arquivamento. A assinatura digital garante integridade, autenticidade e não repúdio.",
+          correct_index: 1,
+          explanation: "A estratégia padrão ouro internacional de segurança em backup é a regra 3-2-1 (3 cópias, 2 mídias distintas, 1 cópia externa/nuvem). No backup diferencial, o bit de arquivo NÃO é desmarcado.",
         },
       ];
 
-      // Ajustar pela quantidade solicitada
-      const finalSelection = bankQuestions.slice(0, quantity);
-      setGeneratedQuestions(finalSelection);
+      const sliceCount = Math.min(quantity, bankQuestions.length);
+      setGeneratedQuestions(bankQuestions.slice(0, sliceCount));
       setIsGenerating(false);
-    }, 1500);
+    }, 1200);
   };
 
   const handleAnswer = async (qId: string, optIndex: number, correctIndex: number) => {
@@ -178,16 +225,42 @@ function GeradorQuestoesIaPage() {
     if (user?.id) {
       await supabase.from("question_attempts").insert({
         user_id: user.id,
-        question_id: null, // Questão gerada por IA
+        question_id: null,
         selected_index: optIndex,
         is_correct: optIndex === correctIndex,
       });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-multicourse"] });
     }
   };
 
+  // Salvar no Banco de Questões do Curso (Item 4 da especificação)
+  const handleSaveToCourseBank = async () => {
+    if (!selectedCourse || generatedQuestions.length === 0) return;
+    setIsSavingToBank(true);
+
+    const questionsToInsert = generatedQuestions.map((q) => ({
+      course_id: selectedCourse,
+      module_id: selectedModule || null,
+      lesson_id: selectedLesson || null,
+      statement: q.statement,
+      options: q.options,
+      correct_index: q.correct_index,
+      explanation: q.explanation,
+      banca: q.banca,
+      difficulty: q.difficulty.toLowerCase() === "fácil" ? "facil" : q.difficulty.toLowerCase() === "difícil" ? "dificil" : "medio",
+      subject: q.subject,
+      ano: new Date().getFullYear(),
+    }));
+
+    await supabase.from("questions").insert(questionsToInsert);
+    setIsSavingToBank(false);
+    setSavedSuccess(true);
+    queryClient.invalidateQueries({ queryKey: ["questoes_full_page"] });
+    setTimeout(() => setSavedSuccess(false), 3000);
+  };
+
   return (
-    <div className="space-y-8 max-w-4xl mx-auto">
+    <div className="space-y-8 max-w-4xl mx-auto pb-12">
       {/* Topo */}
       <div>
         <Link
@@ -203,23 +276,54 @@ function GeradorQuestoesIaPage() {
           <div>
             <h1 className="text-2xl md:text-3xl font-bold font-display">GERADOR DE QUESTÕES IA</h1>
             <p className="text-xs md:text-sm text-muted-foreground">
-              Gere simulados inéditos com questões no padrão de bancas de concursos a partir das aulas e materiais.
+              Gere questões contextualizadas estritamente pelo curso e edital escolhido.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Painel de Configuração e Filtros */}
+      {/* Formulário em Cascata: CURSO -> MÓDULO -> AULA -> ASSUNTO */}
       <section className="panel p-6 space-y-6">
-        <h2 className="text-base font-bold font-display border-b border-border pb-3 flex items-center gap-2">
-          <Sparkles className="size-4 text-primary" /> Parâmetros de Geração
-        </h2>
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <h2 className="text-base font-bold font-display flex items-center gap-2">
+            <Sparkles className="size-4 text-primary" /> Parâmetros de Geração Contextual
+          </h2>
+          <Badge variant="outline" className="text-[11px]">
+            {courses.length} cursos cadastrados
+          </Badge>
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          {/* Filtro Módulo */}
+          {/* 1. SELETOR DE CURSO (Obrigatório) */}
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-primary mb-1.5 flex items-center gap-1.5">
+              <GraduationCap className="size-3.5" /> 1. Curso (Obrigatório)
+            </label>
+            <select
+              value={selectedCourse}
+              onChange={(e) => {
+                setSelectedCourse(e.target.value);
+                setSelectedModule("");
+                setSelectedLesson("");
+              }}
+              className="w-full rounded-xl border border-primary/40 bg-background px-4 py-2.5 text-sm font-semibold focus:border-primary focus:outline-none"
+            >
+              <option value="">Selecione o Curso para contextualizar a IA...</option>
+              {courses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title} ({c.category})
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              A IA utilizará apenas os conteúdos, matérias e edital do curso selecionado.
+            </p>
+          </div>
+
+          {/* 2. SELETOR DE MÓDULO */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              Módulo
+              2. Módulo do Curso
             </label>
             <select
               value={selectedModule}
@@ -227,9 +331,10 @@ function GeradorQuestoesIaPage() {
                 setSelectedModule(e.target.value);
                 setSelectedLesson("");
               }}
-              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+              disabled={!selectedCourse}
+              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:outline-none disabled:opacity-50"
             >
-              <option value="">Todos os Módulos / Geral</option>
+              <option value="">Todos os Módulos deste Curso</option>
               {modules.map((m) => (
                 <option key={m.id} value={m.id}>
                   Módulo {m.position} — {m.title}
@@ -238,10 +343,10 @@ function GeradorQuestoesIaPage() {
             </select>
           </div>
 
-          {/* Filtro Aula */}
+          {/* 3. SELETOR DE AULA */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              Aula Específica (Opcional)
+              3. Aula Específica (Opcional)
             </label>
             <select
               value={selectedLesson}
@@ -249,7 +354,7 @@ function GeradorQuestoesIaPage() {
               disabled={!selectedModule}
               className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:outline-none disabled:opacity-50"
             >
-              <option value="">Todo o conteúdo do módulo</option>
+              <option value="">Todo o Módulo</option>
               {lessons.map((l) => (
                 <option key={l.id} value={l.id}>
                   Aula {l.position} — {l.title}
@@ -258,194 +363,201 @@ function GeradorQuestoesIaPage() {
             </select>
           </div>
 
-          {/* Filtro Assunto / Palavra-chave */}
+          {/* 4. ASSUNTO OU PALAVRA-CHAVE */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              Assunto ou Foco
+              4. Assunto / Tópico Específico
             </label>
             <input
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="Ex: Criptografia, Memória RAM, Comandos Linux..."
+              placeholder="Ex: Topologias de Rede, Permissões Linux, Malware..."
               className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
             />
           </div>
 
-          {/* Quantidade */}
+          {/* 5. QUANTIDADE */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              Quantidade de Questões
+              5. Quantidade de Questões
             </label>
-            <div className="grid grid-cols-4 gap-2">
-              {[5, 10, 15, 20].map((qty) => (
-                <button
-                  key={qty}
-                  type="button"
-                  onClick={() => setQuantity(qty)}
-                  className={cn(
-                    "rounded-xl py-2 text-xs font-bold transition-all border",
-                    quantity === qty
-                      ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                      : "bg-secondary text-muted-foreground border-border hover:text-foreground"
-                  )}
-                >
-                  {qty}
-                </button>
-              ))}
-            </div>
+            <select
+              value={quantity}
+              onChange={(e) => setQuantity(Number(e.target.value))}
+              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+            >
+              <option value={3}>3 questões</option>
+              <option value={5}>5 questões</option>
+              <option value={10}>10 questões</option>
+            </select>
           </div>
 
-          {/* Dificuldade */}
+          {/* 6. DIFICULDADE */}
           <div className="sm:col-span-2">
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              Nível de Dificuldade
+              6. Nível de Dificuldade
             </label>
-            <div className="grid grid-cols-3 gap-3">
-              {(["Fácil", "Médio", "Difícil"] as const).map((diff) => (
+            <div className="flex gap-3">
+              {(["Fácil", "Médio", "Difícil"] as const).map((lvl) => (
                 <button
-                  key={diff}
+                  key={lvl}
                   type="button"
-                  onClick={() => setDifficulty(diff)}
+                  onClick={() => setDifficulty(lvl)}
                   className={cn(
-                    "rounded-xl py-2.5 text-xs font-bold transition-all border",
-                    difficulty === diff
-                      ? "bg-accent/20 text-accent border-accent/40 font-bold"
-                      : "bg-secondary text-muted-foreground border-border hover:text-foreground"
+                    "flex-1 rounded-xl py-2 text-xs font-bold transition-all border",
+                    difficulty === lvl
+                      ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                      : "bg-secondary/40 text-muted-foreground border-border hover:bg-secondary"
                   )}
                 >
-                  {diff}
+                  {lvl}
                 </button>
               ))}
             </div>
           </div>
         </div>
 
+        {/* Botão de Geração */}
         <button
           onClick={handleGenerate}
-          disabled={isGenerating}
-          className="glow-primary flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-transform hover:scale-[1.01] disabled:opacity-50"
+          disabled={!selectedCourse || isGenerating}
+          className="glow-primary flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 font-semibold text-primary-foreground transition-opacity hover:opacity-95 disabled:opacity-50"
         >
           {isGenerating ? (
             <>
-              <Loader2 className="size-4 animate-spin" /> Analisando conteúdo e gerando questões com IA...
+              <Loader2 className="size-4 animate-spin" />
+              PROCESSANDO CONTEXTO DO CURSO COM IA...
             </>
           ) : (
             <>
-              <Sparkles className="size-4 fill-current" /> GERAR QUESTÕES
+              <Sparkles className="size-4" />
+              GERAR QUESTÕES COM IA
             </>
           )}
         </button>
+
+        {!selectedCourse && (
+          <p className="text-center text-xs text-amber-500 font-medium">
+            ⚠ Selecione um curso acima para habilitar o gerador com IA.
+          </p>
+        )}
       </section>
 
       {/* Questões Geradas */}
       {generatedQuestions.length > 0 && (
         <section className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold font-display">
-              Simulado Gerado ({generatedQuestions.length} questões)
-            </h2>
-            <button
-              onClick={() => {
-                setGeneratedQuestions([]);
-                setUserAnswers({});
-              }}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
-            >
-              <RotateCcw className="size-3.5" /> Limpar simulado
-            </button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-3">
+            <div>
+              <h2 className="text-lg font-bold font-display">
+                Questões Geradas ({generatedQuestions.length})
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Resolva o simulado e confira o gabarito comentado instantaneamente.
+              </p>
+            </div>
+
+            {isAdmin && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSaveToCourseBank}
+                  disabled={isSavingToBank || savedSuccess}
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {isSavingToBank ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" /> Salvando...
+                    </>
+                  ) : savedSuccess ? (
+                    <>
+                      <CheckCircle2 className="size-3.5" /> Salvas no Curso!
+                    </>
+                  ) : (
+                    <>
+                      <PlusCircle className="size-3.5" /> Salvar no Banco do Curso
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="space-y-6">
-            {generatedQuestions.map((q, qIndex) => {
-              const selectedIdx = userAnswers[q.id];
-              const hasAnswered = selectedIdx !== undefined;
-              const isCorrect = selectedIdx === q.correct_index;
+            {generatedQuestions.map((q, idx) => {
+              const answeredIndex = userAnswers[q.id];
+              const isAnswered = answeredIndex !== undefined;
 
               return (
                 <div key={q.id} className="panel p-6 space-y-4">
-                  {/* Header da Questão Padrão Concurso */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3 text-xs">
-                    <div className="flex items-center gap-2 font-bold">
-                      <span className="text-primary font-mono">QUESTÃO {String(qIndex + 1).padStart(2, "0")}</span>
-                      <span className="rounded bg-secondary px-2 py-0.5 text-foreground">{q.banca}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <span>Dificuldade: <strong>{q.difficulty}</strong></span>
-                      <span>•</span>
-                      <span>{q.subject}</span>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3 text-xs">
+                    <span className="font-bold text-accent">QUESTÃO {idx + 1}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        {q.banca}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded px-2 py-0.5 text-[11px] font-bold",
+                          q.difficulty === "Fácil" && "bg-emerald-500/10 text-emerald-500",
+                          q.difficulty === "Médio" && "bg-amber-500/10 text-amber-500",
+                          q.difficulty === "Difícil" && "bg-rose-500/10 text-rose-500"
+                        )}
+                      >
+                        {q.difficulty}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Enunciado */}
-                  <p className="text-base text-foreground leading-relaxed">{q.statement}</p>
+                  <p className="font-medium text-sm leading-relaxed">{q.statement}</p>
 
-                  {/* 5 Alternativas Padrão (A, B, C, D, E) */}
-                  <div className="space-y-2.5 pt-2">
-                    {q.options.map((opt, optIndex) => {
-                      const letter = String.fromCharCode(65 + optIndex);
-                      const isSelected = selectedIdx === optIndex;
-                      const isThisCorrect = optIndex === q.correct_index;
+                  <div className="space-y-2">
+                    {q.options.map((opt, optIdx) => {
+                      const letter = String.fromCharCode(65 + optIdx);
+                      const isSelected = answeredIndex === optIdx;
+                      const isCorrectOpt = optIdx === q.correct_index;
 
-                      let style = "border-border bg-secondary/20 hover:bg-secondary/60";
-                      if (hasAnswered) {
-                        if (isThisCorrect) {
-                          style = "border-emerald-500/50 bg-emerald-500/10 text-emerald-500 font-semibold";
-                        } else if (isSelected) {
-                          style = "border-red-500/50 bg-red-500/10 text-red-500 line-through";
-                        } else {
-                          style = "opacity-40 border-border";
+                      let btnStyle = "border-border hover:bg-secondary/60";
+                      if (isAnswered) {
+                        if (isCorrectOpt) {
+                          btnStyle = "border-emerald-500 bg-emerald-500/10 text-emerald-400 font-semibold";
+                        } else if (isSelected && !isCorrectOpt) {
+                          btnStyle = "border-rose-500 bg-rose-500/10 text-rose-400";
                         }
                       }
 
                       return (
                         <button
-                          key={optIndex}
-                          disabled={hasAnswered}
-                          onClick={() => handleAnswer(q.id, optIndex, q.correct_index)}
+                          key={optIdx}
+                          onClick={() => !isAnswered && handleAnswer(q.id, optIdx, q.correct_index)}
+                          disabled={isAnswered}
                           className={cn(
-                            "flex w-full items-start gap-3.5 rounded-xl border p-3.5 text-left text-sm transition-all",
-                            style
+                            "flex w-full items-start gap-3 rounded-xl border p-3 text-left text-xs transition-colors",
+                            btnStyle
                           )}
                         >
-                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-secondary font-mono text-xs font-bold">
+                          <span className="grid size-5 shrink-0 place-items-center rounded-md bg-secondary font-bold text-[11px]">
                             {letter}
                           </span>
-                          <span className="flex-1 leading-relaxed">{opt}</span>
+                          <span className="mt-0.5 leading-relaxed">{opt}</span>
                         </button>
                       );
                     })}
                   </div>
 
-                  {/* Feedback Padrão: ✓ CORRETA ou ✗ INCORRETA + GABARITO + COMENTÁRIO */}
-                  {hasAnswered && (
-                    <div
-                      className={cn(
-                        "rounded-xl p-4 text-sm leading-relaxed border space-y-2 mt-4",
-                        isCorrect ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"
-                      )}
-                    >
+                  {isAnswered && (
+                    <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-2 text-xs animate-in fade-in-50">
                       <div className="flex items-center gap-2 font-bold">
-                        {isCorrect ? (
-                          <span className="text-emerald-500 flex items-center gap-1.5">
-                            <CheckCircle2 className="size-4" /> ✓ CORRETA
+                        {answeredIndex === q.correct_index ? (
+                          <span className="text-emerald-500 flex items-center gap-1">
+                            <CheckCircle2 className="size-4" /> Resposta Correta!
                           </span>
                         ) : (
-                          <span className="text-amber-500 flex items-center gap-1.5">
-                            <XCircle className="size-4" /> ✗ INCORRETA
+                          <span className="text-rose-500 flex items-center gap-1">
+                            <XCircle className="size-4" /> Resposta Incorreta (Gabarito: Letra {String.fromCharCode(65 + q.correct_index)})
                           </span>
                         )}
-                        <span className="text-muted-foreground ml-2">
-                          GABARITO: <strong>{String.fromCharCode(65 + q.correct_index)}</strong>
-                        </span>
                       </div>
-
-                      <div className="text-xs md:text-sm text-muted-foreground pt-1 border-t border-border/50">
-                        <p className="font-semibold text-foreground uppercase text-[11px] tracking-wider mb-1">
-                          COMENTÁRIO DO PROFESSOR / IA:
-                        </p>
-                        <p>{q.explanation}</p>
-                      </div>
+                      <p className="text-muted-foreground leading-relaxed">{q.explanation}</p>
                     </div>
                   )}
                 </div>
@@ -457,3 +569,4 @@ function GeradorQuestoesIaPage() {
     </div>
   );
 }
+export default GeradorQuestoesIaPage;

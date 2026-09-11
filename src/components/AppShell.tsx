@@ -10,10 +10,12 @@ import {
   ListChecks,
   LogOut,
   Menu,
+  PlusCircle,
   Search,
   Settings,
   Sparkles,
   Star,
+  Users,
   Video,
   X,
 } from "lucide-react";
@@ -23,7 +25,7 @@ import { cn } from "@/lib/utils";
 
 const nav = [
   { to: "/dashboard", label: "Início", icon: LayoutDashboard },
-  { to: "/curso", label: "Meu curso", icon: BookOpen },
+  { to: "/meus-cursos", label: "Meus Cursos", icon: BookOpen },
   { to: "/questoes", label: "Questões", icon: ListChecks },
   { to: "/questoes/ia", label: "Questões IA", icon: Sparkles },
   { to: "/materiais", label: "Materiais PDF", icon: FileText },
@@ -41,12 +43,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<{
+    cursos: any[];
     aulas: any[];
     modulos: any[];
     materiais: any[];
     questoes: any[];
     transcricoes: any[];
   }>({
+    cursos: [],
     aulas: [],
     modulos: [],
     materiais: [],
@@ -57,7 +61,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Executar Busca Global quando o usuário digitar
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.trim().length < 2) {
-      setSearchResults({ aulas: [], modulos: [], materiais: [], questoes: [], transcricoes: [] });
+      setSearchResults({ cursos: [], aulas: [], modulos: [], materiais: [], questoes: [], transcricoes: [] });
       return;
     }
 
@@ -65,7 +69,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       setIsSearching(true);
       const term = searchQuery.trim();
 
-      const [aulasRes, modulosRes, materiaisRes, questoesRes, transRes] = await Promise.all([
+      const [cursosRes, aulasRes, modulosRes, materiaisRes, questoesRes, transRes] = await Promise.all([
+        supabase.from("courses").select("id, title, category").ilike("title", `%${term}%`).limit(3),
         supabase.from("lessons").select("id, title, position, module_id").ilike("title", `%${term}%`).limit(5),
         supabase.from("modules").select("id, title, position").ilike("title", `%${term}%`).limit(3),
         supabase.from("materials").select("id, title, file_url, lesson_id").ilike("title", `%${term}%`).limit(4),
@@ -74,6 +79,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       ]);
 
       setSearchResults({
+        cursos: cursosRes.data ?? [],
         aulas: aulasRes.data ?? [],
         modulos: modulosRes.data ?? [],
         materiais: materiaisRes.data ?? [],
@@ -99,6 +105,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     .toUpperCase();
 
   const totalResults =
+    searchResults.cursos.length +
     searchResults.aulas.length +
     searchResults.modulos.length +
     searchResults.materiais.length +
@@ -145,6 +152,24 @@ export function AppShell({ children }: { children: ReactNode }) {
             Painel Geral
           </Link>
           <Link
+            to="/admin/cursos"
+            onClick={() => setOpen(false)}
+            activeProps={{ className: "bg-secondary text-foreground font-semibold" }}
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <GraduationCap className="size-4" />
+            Cursos
+          </Link>
+          <Link
+            to="/admin/alunos"
+            onClick={() => setOpen(false)}
+            activeProps={{ className: "bg-secondary text-foreground font-semibold" }}
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <Users className="size-4" />
+            Alunos & Acessos
+          </Link>
+          <Link
             to="/admin/aulas"
             onClick={() => setOpen(false)}
             activeProps={{ className: "bg-secondary text-foreground font-semibold" }}
@@ -163,13 +188,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             Módulos
           </Link>
           <Link
-            to="/admin/aulas/nova"
+            to="/admin/cursos/novo"
             onClick={() => setOpen(false)}
             activeProps={{ className: "bg-secondary text-foreground font-semibold" }}
             className="flex items-center gap-3 rounded-lg px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           >
-            <GraduationCap className="size-4" />
-            Nova Aula
+            <PlusCircle className="size-4" />
+            Novo Curso
           </Link>
         </>
       )}
@@ -283,6 +308,26 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <p className="text-xs text-muted-foreground animate-pulse py-2 text-center">
                       Pesquisando na plataforma...
                     </p>
+                  )}
+
+                  {/* 0. Cursos */}
+                  {searchResults.cursos.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-accent">Cursos</p>
+                      {searchResults.cursos.map((c) => (
+                        <Link
+                          key={c.id}
+                          to="/curso"
+                          search={{ cursoId: c.id }}
+                          onClick={() => setSearchOpen(false)}
+                          className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-secondary text-xs text-foreground transition-colors"
+                        >
+                          <GraduationCap className="size-3.5 text-primary shrink-0" />
+                          <span className="truncate font-medium">{c.title}</span>
+                          <span className="text-[10px] text-muted-foreground ml-auto">{c.category}</span>
+                        </Link>
+                      ))}
+                    </div>
                   )}
 
                   {/* 1. Aulas */}

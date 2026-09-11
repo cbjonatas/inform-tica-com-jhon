@@ -26,8 +26,19 @@ function ModuloDetailPage() {
         supabase.from("lesson_progress").select("lesson_id, completed, position_seconds"),
       ]);
 
+      let course = null;
+      if (modRes.data?.course_id) {
+        const courseRes = await supabase
+          .from("courses")
+          .select("id, title, category")
+          .eq("id", modRes.data.course_id)
+          .maybeSingle();
+        course = courseRes.data;
+      }
+
       return {
         module: modRes.data,
+        course,
         lessons: lessonsRes.data ?? [],
         progress: progressRes.data ?? [],
       };
@@ -35,6 +46,7 @@ function ModuloDetailPage() {
   });
 
   const module = data?.module;
+  const course = data?.course;
   const lessons = data?.lessons ?? [];
   const progress = data?.progress ?? [];
 
@@ -73,13 +85,22 @@ function ModuloDetailPage() {
 
   return (
     <div className="space-y-8">
-      {/* Navegação de retorno */}
-      <Link
-        to="/curso"
-        className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Voltar para todos os módulos
-      </Link>
+      {/* Navegação de retorno e Breadcrumbs */}
+      <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+        <Link to="/meus-cursos" className="hover:text-foreground transition-colors">
+          Meus Cursos
+        </Link>
+        <span>/</span>
+        <Link
+          to="/curso"
+          search={module.course_id ? { cursoId: module.course_id } : undefined}
+          className="hover:text-foreground transition-colors font-semibold text-primary"
+        >
+          {course ? course.title : "Curso"}
+        </Link>
+        <span>/</span>
+        <span className="text-foreground truncate max-w-[200px]">{module.title}</span>
+      </div>
 
       {/* Cabeçalho do Módulo */}
       <header className="panel p-6 md:p-8 space-y-6">

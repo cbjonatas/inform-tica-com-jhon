@@ -1,14 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
-import { Bot, Send, Sparkles, User, RefreshCw, BookOpen, ShieldAlert, Cpu } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Bot, Send, Sparkles, User, RefreshCw, BookOpen, ShieldAlert, Cpu, GraduationCap } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_authenticated/ia")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    cursoId: typeof search.cursoId === "string" ? search.cursoId : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Tutor de IA — Informática com Jhon" },
-      { name: "description", content: "Tire dúvidas e revise matérias de informática para concursos com IA." },
+      { name: "description", content: "Tire dúvidas e revise matérias de informática isoladas pelo contexto do seu concurso." },
     ],
   }),
   component: IaPage,
@@ -45,7 +51,26 @@ const PRESET_PROMPTS = [
 ];
 
 function IaPage() {
-  const { profile, user } = useAuth();
+  const { cursoId: queryCursoId } = Route.useSearch();
+  const { profile, user, isAdmin } = useAuth();
+  const [selectedCourseId, setSelectedCourseId] = useState<string>(queryCursoId || "");
+
+  // Buscar cursos do aluno para isolamento contextual (Item 5 da especificação)
+  const { data: courses = [] } = useQuery({
+    queryKey: ["ia_courses", user?.id, isAdmin],
+    queryFn: async () => {
+      let query = supabase.from("courses").select("id, title, category").order("position");
+      if (!isAdmin) {
+        query = query.eq("status", "published");
+      }
+      const res = await query;
+      return res.data ?? [];
+    },
+  });
+
+  const activeCourse =
+    courses.find((c) => c.id === selectedCourseId) || courses[0] || null;
+
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -53,13 +78,14 @@ function IaPage() {
       role: "assistant",
       content: `Olá, ${profile?.full_name?.split(" ")[0] || "estudante"}! Sou o **Tutor de IA do Jhon**.
       
-Estou aqui para acelerar sua preparação em **Informática para Concursos Públicos**. Você pode me pedir:
+Estou aqui para acelerar sua preparação em **Informática para Concursos Públicos**, com foco total no edital do seu curso.
+Você pode me pedir:
 * Explicações de conceitos teóricos difíceis
 * Comparativos e macetes de memorização
-* Pegadinhas clássicas das bancas (Cebraspe, FGV, FCC, Vunesp)
+* Pegadinhas clássicas das bancas examinadoras
 * Resoluções comentadas de questões
 
-Selecione um dos temas rápidos abaixo ou digite sua dúvida!`,
+Selecione um dos temas rápidos abaixo ou envie sua dúvida!`,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     },
   ]);
@@ -70,22 +96,22 @@ Selecione um dos temas rápidos abaixo ou digite sua dúvida!`,
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const generateAnswer = (promptText: string) => {
+  const generateAnswer = (promptText: string, courseTitle: string) => {
     const text = promptText.toLowerCase();
 
     if (text.includes("memória") || text.includes("cache") || text.includes("ram")) {
-      return `📌 **Hierarquia de Memórias para Concursos:**
+      return `📌 **Hierarquia de Memórias — Foco: ${courseTitle}**
 
 1. **Registradores:** Localizados dentro da CPU. São as memórias **mais rápidas, mais caras por bit e com menor capacidade** (ordem de bytes).
 2. **Memória Cache (L1, L2, L3):** Memória estática (SRAM), extremamente rápida, faz a ponte entre os registradores e a RAM para diminuir a ociosidade do processador.
 3. **Memória Principal (RAM):** Memória dinâmica (DRAM), **volátil** (perde os dados sem energia). Armazena os programas e dados em execução no momento.
 4. **Memória Secundária (SSD / HD):** Memória permanente (**não volátil**), maior capacidade de armazenamento e menor custo por gigabyte.
 
-💡 *Pegadinha clássica de prova:* As bancas adoram afirmar que a memória ROM é volátil ou que o cache substitui o HD. Fique atento: ROM e SSD são **não voláteis**; RAM e Cache são **voláteis**!`;
+💡 *Pegadinha clássica em provas de ${courseTitle}:* As bancas adoram afirmar que a memória ROM é volátil ou que o cache substitui o HD. Lembre-se: ROM e SSD são **não voláteis**; RAM e Cache são **voláteis**!`;
     }
 
     if (text.includes("linux") || text.includes("chmod") || text.includes("comando")) {
-      return `🐧 **Linux para Concursos — Pontos Críticos:**
+      return `🐧 **Linux para Concursos — Foco: ${courseTitle}**
 
 * \`chmod\`: altera **permissões** de leitura (\`r=4\`), escrita (\`w=2\`) e execução (\`x=1\`).
   * Exemplo: \`chmod 755 arquivo\` -> Dono tem 7 (4+2+1, total), Grupo tem 5 (4+1, leitura e execução), Outros têm 5.
@@ -94,32 +120,34 @@ Selecione um dos temas rápidos abaixo ou digite sua dúvida!`,
 * \`grep\`: busca padrões ou palavras dentro de arquivos.
 * \`ps aux\` ou \`top\`: visualiza processos em execução.
 
-💡 *Atenção:* O Linux é *case-sensitive* (diferencia maiúsculas de minúsculas) em seus comandos e nomes de arquivos.`;
+💡 *Atenção:* No edital de ${courseTitle}, é fundamental saber que o Linux é *case-sensitive* (diferencia maiúsculas de minúsculas).`;
     }
 
     if (text.includes("malware") || text.includes("segurança") || text.includes("trojan") || text.includes("ransomware")) {
-      return `🛡️ **Principais Ameaças (Malwares) cobradas em Concursos:**
+      return `🛡️ **Segurança da Informação e Malwares — Foco: ${courseTitle}**
 
-* **Vírus:** Necessita de um hospedeiro (arquivo executável) e de ação do usuário para se propagar.
-* **Worm (Verme):** Auto-replicável. Não necessita de hospedeiro nem de ação do usuário; propaga-se diretamente através das vulnerabilidades da rede.
-* **Trojan (Cavalo de Troia):** Disfarça-se de programa legítimo/útil para abrir portas e permitir acesso remoto não autorizado (*backdoor*).
-* **Ransomware:** Sequestra dados criptografando arquivos do sistema e exige resgate (normalmente em criptomoedas).
-* **Spyware:** Monitora as atividades do usuário e envia informações a terceiros (ex: *Keylogger*, *Screenlogger*).`;
+* **Vírus:** Necessita de um programa hospedeiro e de execução explícita pelo usuário para se propagar.
+* **Worm (Verme):** Autoexecutável e autopropagável. Propaga-se automaticamente explorando vulnerabilidades na rede.
+* **Trojan (Cavalo de Troia):** Disfarça-se de programa útil ou jogo, mas executa ações maliciosas ocultas em segundo plano.
+* **Ransomware:** Criptografa arquivos do sistema e exige resgate financeiro (frequentemente em criptomoedas).
+* **Spyware:** Monitora e furta informações do usuário (ex: Keyloggers capturam teclas, Screenloggers capturam telas).
+
+💡 *Dica do Jhon para ${courseTitle}:* O Worm NÃO precisa de hospedeiro, o Vírus PRECISA de hospedeiro!`;
     }
 
-    return `Entendi sua dúvida sobre **"${promptText}"**!
+    return `Entendi sua dúvida sobre "${promptText}" para a preparação em **${courseTitle}**!
 
-Na abordagem para concursos públicos, este tópico costuma ser avaliado com foco em:
-1. **Definição precisa:** Não confunda sinônimos com termos técnicos formais adotados pelas bancas.
-2. **Contexto prático:** Como isso se aplica no ambiente do usuário (atalhos, configurações de rede, painéis de controle).
-3. **Exceções:** As bancas geralmente focam em casos em que a regra geral não se aplica ou em novidades de atualizações recentes.
+Com base nos tópicos mais recorrentes das bancas para este concurso:
+1. Revise a teoria fundamental no módulo correspondente.
+2. Foque nas palavras-chave do enunciado que as bancas costumam trocar para induzir ao erro.
+3. Pratique questões comentadas no nosso Banco de Questões do curso.
 
-Gostaria de ver uma questão de concurso simulada sobre esse tema para testar seus conhecimentos?`;
+Se desejar, detalhe mais o comando, protocolo ou conceito que você quer que eu esquematize passo a passo!`;
   };
 
   const handleSend = (textToSend?: string) => {
-    const query = (textToSend || input).trim();
-    if (!query || isTyping) return;
+    const query = textToSend || input;
+    if (!query.trim() || isTyping) return;
 
     const userMsg: Message = {
       id: String(Date.now()),
@@ -132,8 +160,10 @@ Gostaria de ver uma questão de concurso simulada sobre esse tema para testar se
     setInput("");
     setIsTyping(true);
 
+    const activeTitle = activeCourse?.title || "Informática para Concursos";
+
     setTimeout(() => {
-      const replyContent = generateAnswer(query);
+      const replyContent = generateAnswer(query, activeTitle);
       const botMsg: Message = {
         id: String(Date.now() + 1),
         role: "assistant",
@@ -142,13 +172,13 @@ Gostaria de ver uma questão de concurso simulada sobre esse tema para testar se
       };
       setMessages((prev) => [...prev, botMsg]);
       setIsTyping(false);
-    }, 800);
+    }, 700);
   };
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] min-h-[500px]">
-      {/* Header */}
-      <header className="flex items-center justify-between border-b border-border pb-4 mb-4 shrink-0">
+      {/* Header com Seletor de Curso (Item 5 da especificação) */}
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4 mb-4 shrink-0">
         <div className="flex items-center gap-3">
           <div className="grid size-10 place-items-center rounded-xl bg-accent/20 text-accent">
             <Sparkles className="size-5" />
@@ -159,15 +189,30 @@ Gostaria de ver uma questão de concurso simulada sobre esse tema para testar se
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            setMessages([messages[0]]);
-          }}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          title="Reiniciar conversa"
-        >
-          <RefreshCw className="size-3.5" /> Limpar chat
-        </button>
+        {/* Seletor de Contexto do Curso */}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <GraduationCap className="size-4 text-primary" />
+          <span className="text-xs text-muted-foreground">Contexto:</span>
+          <select
+            value={activeCourse?.id || ""}
+            onChange={(e) => setSelectedCourseId(e.target.value)}
+            className="rounded-lg border border-primary/40 bg-secondary/80 px-3 py-1.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none"
+          >
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={() => setMessages([messages[0]])}
+            className="ml-2 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            title="Reiniciar conversa"
+          >
+            <RefreshCw className="size-3.5" /> Limpar
+          </button>
+        </div>
       </header>
 
       {/* Sugestões de Perguntas Rápidas */}
@@ -206,46 +251,45 @@ Gostaria de ver uma questão de concurso simulada sobre esse tema para testar se
             <div
               className={cn(
                 "grid size-8 shrink-0 place-items-center rounded-xl text-xs font-bold",
-                msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-accent/20 text-accent"
+                msg.role === "assistant"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-foreground"
               )}
             >
-              {msg.role === "user" ? <User className="size-4" /> : <Bot className="size-4" />}
+              {msg.role === "assistant" ? <Bot className="size-4" /> : <User className="size-4" />}
             </div>
 
-            <div
-              className={cn(
-                "rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "panel border-border text-foreground space-y-2"
-              )}
-            >
-              <div className="whitespace-pre-line">{msg.content}</div>
-              <p
+            <div className="space-y-1">
+              <div
                 className={cn(
-                  "text-[10px] text-right mt-1.5",
-                  msg.role === "user" ? "text-primary-foreground/70" : "text-muted-foreground"
+                  "rounded-2xl px-4 py-3 text-xs leading-relaxed md:text-sm whitespace-pre-wrap",
+                  msg.role === "assistant"
+                    ? "border border-border bg-card text-foreground"
+                    : "bg-primary text-primary-foreground"
                 )}
               >
-                {msg.timestamp}
-              </p>
+                {msg.content}
+              </div>
+              <span className="block px-2 text-[10px] text-muted-foreground">{msg.timestamp}</span>
             </div>
           </div>
         ))}
 
         {isTyping && (
-          <div className="flex items-center gap-3 text-muted-foreground text-xs">
-            <div className="grid size-8 place-items-center rounded-xl bg-accent/20 text-accent">
-              <Sparkles className="size-4 animate-spin" />
+          <div className="flex items-center gap-3">
+            <div className="grid size-8 place-items-center rounded-xl bg-primary text-primary-foreground text-xs">
+              <Bot className="size-4 animate-spin" />
             </div>
-            <span>O Tutor Jhon está elaborando a resposta...</span>
+            <div className="rounded-2xl border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+              O Tutor de IA está pesquisando e elaborando a resposta para {activeCourse?.title || "o curso"}...
+            </div>
           </div>
         )}
 
         <div ref={chatEndRef} />
       </div>
 
-      {/* Caixa de Entrada */}
+      {/* Input de Pergunta */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -257,17 +301,19 @@ Gostaria de ver uma questão de concurso simulada sobre esse tema para testar se
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Pergunte sobre qualquer matéria de informática para concurso..."
-          className="flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm focus:border-primary focus:outline-none"
+          placeholder={`Tire sua dúvida com a IA para ${activeCourse?.title || "seu curso"}...`}
+          className="flex-1 rounded-xl border border-border bg-background px-4 py-3 text-xs md:text-sm focus:border-primary focus:outline-none"
         />
         <button
           type="submit"
           disabled={!input.trim() || isTyping}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-sm text-primary-foreground transition-transform hover:scale-[1.02] disabled:opacity-50"
+          className="glow-primary inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-xs font-bold text-primary-foreground transition-opacity hover:opacity-95 disabled:opacity-50"
         >
-          <Send className="size-4" /> Enviar
+          <Send className="size-4" />
+          <span className="hidden sm:inline">Enviar</span>
         </button>
       </form>
     </div>
   );
 }
+export default IaPage;

@@ -31,6 +31,7 @@ function QuestoesPage() {
   const queryClient = useQueryClient();
 
   const [viewMode, setViewMode] = useState<ViewMode>("todas");
+  const [selectedCourse, setSelectedCourse] = useState<string>("all");
   const [selectedModule, setSelectedModule] = useState<string>("all");
   const [selectedBanca, setSelectedBanca] = useState<string>("all");
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>("all");
@@ -41,9 +42,10 @@ function QuestoesPage() {
     queryKey: ["questoes_full_page", user?.id],
     enabled: Boolean(user?.id),
     queryFn: async () => {
-      const [modulesRes, questionsRes, attemptsRes, favsRes] = await Promise.all([
-        supabase.from("modules").select("id, title").order("position"),
-        supabase.from("questions").select("*, modules(title)").order("created_at", { ascending: false }),
+      const [coursesRes, modulesRes, questionsRes, attemptsRes, favsRes] = await Promise.all([
+        supabase.from("courses").select("id, title, category").order("position"),
+        supabase.from("modules").select("id, title, course_id").order("position"),
+        supabase.from("questions").select("*, modules(title), courses(title)").order("created_at", { ascending: false }),
         supabase
           .from("question_attempts")
           .select("question_id, selected_index, is_correct, created_at")
@@ -56,6 +58,7 @@ function QuestoesPage() {
       setFavoritedIds(favSet);
 
       return {
+        courses: coursesRes.data ?? [],
         modules: modulesRes.data ?? [],
         questions: questionsRes.data ?? [],
         attempts: attemptsRes.data ?? [],
@@ -106,6 +109,7 @@ function QuestoesPage() {
     }
   };
 
+  const courses = data?.courses ?? [];
   const modules = data?.modules ?? [];
   const allQuestions = data?.questions ?? [];
   const attempts = data?.attempts ?? [];
@@ -125,9 +129,15 @@ function QuestoesPage() {
 
   const bancas = Array.from(new Set(allQuestions.map((q) => q.banca).filter(Boolean)));
 
+  const availableModules =
+    selectedCourse === "all"
+      ? modules
+      : modules.filter((m) => m.course_id === selectedCourse);
+
   const filteredQuestions = allQuestions.filter((q) => {
     if (viewMode === "erradas" && !wrongQuestionIds.has(q.id)) return false;
     if (viewMode === "favoritas" && !favoritedIds.has(q.id)) return false;
+    if (selectedCourse !== "all" && q.course_id !== selectedCourse) return false;
     if (selectedModule !== "all" && q.module_id !== selectedModule) return false;
     if (selectedBanca !== "all" && q.banca !== selectedBanca) return false;
     if (selectedDifficulty !== "all" && (q.difficulty || "medio") !== selectedDifficulty) return false;
@@ -226,12 +236,28 @@ function QuestoesPage() {
 
         <div className="flex flex-wrap items-center gap-3">
           <select
+            value={selectedCourse}
+            onChange={(e) => {
+              setSelectedCourse(e.target.value);
+              setSelectedModule("all");
+            }}
+            className="rounded-xl border border-primary/40 bg-background px-3 py-2 text-xs font-semibold focus:border-primary focus:outline-none"
+          >
+            <option value="all">Todos os Cursos</option>
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+
+          <select
             value={selectedModule}
             onChange={(e) => setSelectedModule(e.target.value)}
             className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium focus:border-primary focus:outline-none"
           >
             <option value="all">Todos os Módulos</option>
-            {modules.map((m) => (
+            {availableModules.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.title}
               </option>
@@ -262,16 +288,17 @@ function QuestoesPage() {
             <option value="dificil">Difícil</option>
           </select>
 
-          {(selectedModule !== "all" || selectedBanca !== "all" || selectedDifficulty !== "all") && (
+          {(selectedCourse !== "all" || selectedModule !== "all" || selectedBanca !== "all" || selectedDifficulty !== "all") && (
             <button
               onClick={() => {
+                setSelectedCourse("all");
                 setSelectedModule("all");
                 setSelectedBanca("all");
                 setSelectedDifficulty("all");
               }}
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground underline transition-colors"
             >
-              <RotateCcw className="size-3" /> Limpar
+              <RotateCcw className="size-3" /> Limpar filtros
             </button>
           )}
         </div>

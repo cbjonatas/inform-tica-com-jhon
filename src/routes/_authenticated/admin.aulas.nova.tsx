@@ -24,6 +24,7 @@ function NovaAulaPage() {
   const queryClient = useQueryClient();
 
   // Estados do formulário
+  const [selectedCourseId, setSelectedCourseId] = useState("");
   const [moduleId, setModuleId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -43,11 +44,30 @@ function NovaAulaPage() {
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const { data: modules = [] } = useQuery({
-    queryKey: ["admin_modules_select"],
+  // Buscar cursos da plataforma
+  const { data: courses = [] } = useQuery({
+    queryKey: ["admin_courses_select"],
     enabled: isAdmin,
     queryFn: async () => {
-      const res = await supabase.from("modules").select("id, title, position").order("position");
+      const res = await supabase.from("courses").select("id, title, category").order("position");
+      const list = res.data ?? [];
+      if (list.length > 0 && !selectedCourseId) {
+        setSelectedCourseId(list[0].id);
+      }
+      return list;
+    },
+  });
+
+  // Buscar módulos do curso selecionado
+  const { data: modules = [] } = useQuery({
+    queryKey: ["admin_modules_select", selectedCourseId],
+    enabled: isAdmin && Boolean(selectedCourseId),
+    queryFn: async () => {
+      const res = await supabase
+        .from("modules")
+        .select("id, title, position, course_id")
+        .eq("course_id", selectedCourseId)
+        .order("position");
       return res.data ?? [];
     },
   });
@@ -170,6 +190,7 @@ function NovaAulaPage() {
         );
 
         const toInsert = questionsList.map((q) => ({
+          course_id: selectedCourseId || null,
           lesson_id: newLesson.id,
           module_id: moduleId,
           statement: q.statement,
@@ -247,17 +268,40 @@ function NovaAulaPage() {
         {/* Identificação da Aula */}
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              Módulo de Destino *
+            <label className="block text-xs font-semibold uppercase tracking-wider text-primary mb-1.5">
+              1. Curso da Aula *
             </label>
             <select
               required
               disabled={isBusy}
+              value={selectedCourseId}
+              onChange={(e) => {
+                setSelectedCourseId(e.target.value);
+                setModuleId("");
+              }}
+              className="w-full rounded-xl border border-primary/40 bg-background px-4 py-2.5 text-xs font-semibold focus:border-primary focus:outline-none"
+            >
+              <option value="">Selecione o curso...</option>
+              {courses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title} ({c.category})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              2. Módulo de Destino *
+            </label>
+            <select
+              required
+              disabled={isBusy || !selectedCourseId}
               value={moduleId}
               onChange={(e) => setModuleId(e.target.value)}
-              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-xs focus:border-primary focus:outline-none"
+              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-xs focus:border-primary focus:outline-none disabled:opacity-50"
             >
-              <option value="">Selecione o módulo...</option>
+              <option value="">Selecione o módulo deste curso...</option>
               {modules.map((m) => (
                 <option key={m.id} value={m.id}>
                   Módulo {m.position} — {m.title}
