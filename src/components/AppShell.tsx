@@ -101,7 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const initials = (profile?.full_name || user?.email || "A")
     .split(" ")
     .slice(0, 2)
-    .map((p) => p[0])
+    .map((p) => p.charAt(0))
     .join("")
     .toUpperCase();
 

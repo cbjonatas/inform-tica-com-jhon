@@ -65,8 +65,11 @@ export function AdminAlunosPage() {
 
       lessons.forEach((l: any) => {
         const cId = l.modules?.course_id;
-        if (cId && lessonsPerCourse[cId]) {
-          lessonsPerCourse[cId].push(l.id);
+        if (cId) {
+          const list = lessonsPerCourse[cId];
+          if (list) {
+            list.push(l.id);
+          }
         }
       });
 
@@ -307,7 +310,7 @@ export function AdminAlunosPage() {
                                         toggleBlockMutation.mutate({
                                           studentId: student.id,
                                           courseId: course.id,
-                                          currentStatus: enrollment.status,
+                                          currentStatus: enrollment?.status || "active",
                                         })
                                       }
                                       className={`inline-flex items-center gap-1 rounded px-2 py-0.5 font-semibold transition-colors ${

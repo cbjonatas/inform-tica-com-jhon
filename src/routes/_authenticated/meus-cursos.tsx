@@ -185,6 +185,7 @@ export function MeusCursosPage() {
         <div className="space-y-12">
           {categories.map((categoryTitle) => {
             const categoryCourses = categoriesMap[categoryTitle];
+            if (!categoryCourses || categoryCourses.length === 0) return null;
 
             return (
               <section key={categoryTitle} className="space-y-4">

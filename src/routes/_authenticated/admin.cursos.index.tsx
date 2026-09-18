@@ -235,9 +235,10 @@ export function AdminCursosIndexPage() {
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => {
-              if (courses.length > 0) {
+              if (courses.length > 0 && courses[0]) {
                 setSourceCourseId(courses[0].id);
-                setTargetCourseId(courses.length > 1 ? courses[1].id : courses[0].id);
+                const target = courses.length > 1 && courses[1] ? courses[1] : courses[0];
+                setTargetCourseId(target.id);
               }
               setDuplicateModalOpen(true);
             }}

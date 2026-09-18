@@ -33,7 +33,7 @@ function AdminModulosPage() {
     queryFn: async () => {
       const res = await supabase.from("courses").select("id, title, category").order("position");
       const list = res.data ?? [];
-      if (list.length > 0 && !selectedCourseId) {
+      if (list.length > 0 && !selectedCourseId && list[0]) {
         setSelectedCourseId(list[0].id);
       }
       return list;
