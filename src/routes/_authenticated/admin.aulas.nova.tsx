@@ -43,8 +43,9 @@ function NovaAula() {
       toast.error("Selecione o módulo");
       return;
     }
-
+    setEnviando(true);
     try {
+
       let videoPath: string | null = null;
       if (video) {
         setEtapa("Enviando vídeo...");
