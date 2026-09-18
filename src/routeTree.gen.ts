@@ -17,6 +17,7 @@ import { Route as RecuperarSenhaRouteImport } from './routes/recuperar-senha'
 import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCursoIndexRouteImport } from './routes/_authenticated/curso.index'
+import { Route as AuthenticatedCursoModuloModuloIdRouteImport } from './routes/_authenticated/curso.modulo.$moduloId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -57,6 +58,12 @@ const AuthenticatedCursoIndexRoute = AuthenticatedCursoIndexRouteImport.update({
   path: '/curso/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCursoModuloModuloIdRoute =
+  AuthenticatedCursoModuloModuloIdRouteImport.update({
+    id: '/curso/modulo/$moduloId',
+    path: '/curso/modulo/$moduloId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/curso/': typeof AuthenticatedCursoIndexRoute
+  '/curso/modulo/$moduloId': typeof AuthenticatedCursoModuloModuloIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -75,6 +83,7 @@ export interface FileRoutesByTo {
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/curso': typeof AuthenticatedCursoIndexRoute
+  '/curso/modulo/$moduloId': typeof AuthenticatedCursoModuloModuloIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -86,6 +95,7 @@ export interface FileRoutesById {
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/curso/': typeof AuthenticatedCursoIndexRoute
+  '/_authenticated/curso/modulo/$moduloId': typeof AuthenticatedCursoModuloModuloIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/redefinir-senha'
     | '/dashboard'
     | '/curso/'
+    | '/curso/modulo/$moduloId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/redefinir-senha'
     | '/dashboard'
     | '/curso'
+    | '/curso/modulo/$moduloId'
   id:
     | '__root__'
     | '/'
@@ -116,6 +128,7 @@ export interface FileRouteTypes {
     | '/redefinir-senha'
     | '/_authenticated/dashboard'
     | '/_authenticated/curso/'
+    | '/_authenticated/curso/modulo/$moduloId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -185,17 +198,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCursoIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/curso/modulo/$moduloId': {
+      id: '/_authenticated/curso/modulo/$moduloId'
+      path: '/curso/modulo/$moduloId'
+      fullPath: '/curso/modulo/$moduloId'
+      preLoaderRoute: typeof AuthenticatedCursoModuloModuloIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedCursoIndexRoute: typeof AuthenticatedCursoIndexRoute
+  AuthenticatedCursoModuloModuloIdRoute: typeof AuthenticatedCursoModuloModuloIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedCursoIndexRoute: AuthenticatedCursoIndexRoute,
+  AuthenticatedCursoModuloModuloIdRoute: AuthenticatedCursoModuloModuloIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
