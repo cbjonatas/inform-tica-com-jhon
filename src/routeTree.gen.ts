@@ -18,6 +18,7 @@ import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedIaRouteImport } from './routes/_authenticated/ia'
 import { Route as AuthenticatedQuestoesRouteImport } from './routes/_authenticated/questoes'
+import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as AuthenticatedCursoIndexRouteImport } from './routes/_authenticated/curso.index'
 import { Route as AuthenticatedCursoAulaAulaIdRouteImport } from './routes/_authenticated/curso.aula.$aulaId'
 import { Route as AuthenticatedCursoModuloModuloIdRouteImport } from './routes/_authenticated/curso.modulo.$moduloId'
@@ -66,6 +67,11 @@ const AuthenticatedQuestoesRoute = AuthenticatedQuestoesRouteImport.update({
   path: '/questoes',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
+  id: '/admin/',
+  path: '/admin/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedCursoIndexRoute = AuthenticatedCursoIndexRouteImport.update({
   id: '/curso/',
   path: '/curso/',
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/ia': typeof AuthenticatedIaRoute
   '/questoes': typeof AuthenticatedQuestoesRoute
+  '/admin/': typeof AuthenticatedAdminIndexRoute
   '/curso/': typeof AuthenticatedCursoIndexRoute
   '/curso/aula/$aulaId': typeof AuthenticatedCursoAulaAulaIdRoute
   '/curso/modulo/$moduloId': typeof AuthenticatedCursoModuloModuloIdRoute
@@ -106,6 +113,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/ia': typeof AuthenticatedIaRoute
   '/questoes': typeof AuthenticatedQuestoesRoute
+  '/admin': typeof AuthenticatedAdminIndexRoute
   '/curso': typeof AuthenticatedCursoIndexRoute
   '/curso/aula/$aulaId': typeof AuthenticatedCursoAulaAulaIdRoute
   '/curso/modulo/$moduloId': typeof AuthenticatedCursoModuloModuloIdRoute
@@ -121,6 +129,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/ia': typeof AuthenticatedIaRoute
   '/_authenticated/questoes': typeof AuthenticatedQuestoesRoute
+  '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/curso/': typeof AuthenticatedCursoIndexRoute
   '/_authenticated/curso/aula/$aulaId': typeof AuthenticatedCursoAulaAulaIdRoute
   '/_authenticated/curso/modulo/$moduloId': typeof AuthenticatedCursoModuloModuloIdRoute
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/ia'
     | '/questoes'
+    | '/admin/'
     | '/curso/'
     | '/curso/aula/$aulaId'
     | '/curso/modulo/$moduloId'
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/ia'
     | '/questoes'
+    | '/admin'
     | '/curso'
     | '/curso/aula/$aulaId'
     | '/curso/modulo/$moduloId'
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/ia'
     | '/_authenticated/questoes'
+    | '/_authenticated/admin/'
     | '/_authenticated/curso/'
     | '/_authenticated/curso/aula/$aulaId'
     | '/_authenticated/curso/modulo/$moduloId'
@@ -242,6 +254,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedQuestoesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/': {
+      id: '/_authenticated/admin/'
+      path: '/admin'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/curso/': {
       id: '/_authenticated/curso/'
       path: '/curso'
@@ -270,6 +289,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedIaRoute: typeof AuthenticatedIaRoute
   AuthenticatedQuestoesRoute: typeof AuthenticatedQuestoesRoute
+  AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
   AuthenticatedCursoIndexRoute: typeof AuthenticatedCursoIndexRoute
   AuthenticatedCursoAulaAulaIdRoute: typeof AuthenticatedCursoAulaAulaIdRoute
   AuthenticatedCursoModuloModuloIdRoute: typeof AuthenticatedCursoModuloModuloIdRoute
@@ -279,6 +299,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedIaRoute: AuthenticatedIaRoute,
   AuthenticatedQuestoesRoute: AuthenticatedQuestoesRoute,
+  AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
   AuthenticatedCursoIndexRoute: AuthenticatedCursoIndexRoute,
   AuthenticatedCursoAulaAulaIdRoute: AuthenticatedCursoAulaAulaIdRoute,
   AuthenticatedCursoModuloModuloIdRoute: AuthenticatedCursoModuloModuloIdRoute,
