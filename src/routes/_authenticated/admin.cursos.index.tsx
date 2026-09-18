@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   BookOpen,
   Copy,
+  Edit,
   ExternalLink,
   GraduationCap,
   Layers,
@@ -34,13 +35,25 @@ export function AdminCursosIndexPage() {
   const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
 
-  // Estados para Duplicação de Conteúdo (Item 14 da especificação)
+  // Estados para Duplicação de Conteúdo
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
   const [sourceCourseId, setSourceCourseId] = useState<string>("");
   const [sourceModuleId, setSourceModuleId] = useState<string>("");
   const [targetCourseId, setTargetCourseId] = useState<string>("");
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [duplicateSuccess, setDuplicateSuccess] = useState(false);
+
+  // Estados para Edição de Curso
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    cover_url: "",
+    category: "Carreiras Policiais",
+    position: 1,
+    status: "published",
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin_courses_full"],
@@ -94,7 +107,53 @@ export function AdminCursosIndexPage() {
     },
   });
 
-  // DUPLICAR MÓDULO (Item 14: Cópia profunda independente)
+  // Atualizar Curso
+  const updateCourseMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingCourseId) return;
+      const { error } = await supabase
+        .from("courses")
+        .update({
+          title: editForm.title.trim(),
+          description: editForm.description.trim(),
+          cover_url: editForm.cover_url.trim(),
+          category: editForm.category.trim(),
+          position: editForm.position,
+          status: editForm.status,
+        })
+        .eq("id", editingCourseId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin_courses_full"] });
+      queryClient.invalidateQueries({ queryKey: ["admin_multicourse_dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["meus-cursos"] });
+      setEditModalOpen(false);
+      setEditingCourseId(null);
+    },
+    onError: (err) => {
+      alert(`Erro ao salvar alterações no curso: ${err.message}`);
+    },
+  });
+
+  // Excluir Curso
+  const deleteCourseMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("courses").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin_courses_full"] });
+      queryClient.invalidateQueries({ queryKey: ["admin_multicourse_dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["meus-cursos"] });
+    },
+    onError: (err) => {
+      alert(`Erro ao excluir o curso: ${err.message}`);
+    },
+  });
+
+  // DUPLICAR MÓDULO (Cópia profunda independente)
   const handleDuplicateModule = async () => {
     if (!sourceModuleId || !targetCourseId || isDuplicating) return;
     setIsDuplicating(true);
@@ -228,7 +287,7 @@ export function AdminCursosIndexPage() {
           </Link>
           <h1 className="text-2xl font-bold font-display md:text-3xl">Gerenciar Cursos da Plataforma</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            Cadastre novos cursos dinamicamente, gerencie permissões e duplique conteúdos de forma independente.
+            Cadastre novos cursos dinamicamente, gerencie permissões, edite capas e duplique conteúdos de forma independente.
           </p>
         </div>
 
@@ -292,6 +351,9 @@ export function AdminCursosIndexPage() {
                       src={course.cover_url}
                       alt={course.title}
                       className="size-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/images/capa-padrao.png";
+                      }}
                       loading="lazy"
                     />
                   ) : (
@@ -337,7 +399,7 @@ export function AdminCursosIndexPage() {
               </div>
 
               {/* Ações */}
-              <div className="flex items-center justify-between border-t border-border/60 bg-secondary/20 p-3 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-secondary/20 p-3 text-xs">
                 <button
                   onClick={() =>
                     toggleStatusMutation.mutate({
@@ -361,14 +423,45 @@ export function AdminCursosIndexPage() {
                   )}
                 </button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <Link
-                    to="/curso"
-                    search={{ cursoId: course.id }}
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                    to={"/curso" as any}
+                    search={{ cursoId: course.id } as any}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-secondary transition-colors"
                   >
-                    Ver Trilha <ExternalLink className="size-3" />
+                    Ver <ExternalLink className="size-3" />
                   </Link>
+
+                  <button
+                    onClick={() => {
+                      setEditingCourseId(course.id);
+                      setEditForm({
+                        title: course.title,
+                        description: course.description || "",
+                        cover_url: course.cover_url || "",
+                        category: course.category || "Carreiras Policiais",
+                        position: course.position || 1,
+                        status: course.status || "published",
+                      });
+                      setEditModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                    title="Editar Curso"
+                  >
+                    <Edit className="size-3 text-primary" /> Editar
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      if (confirm(`Tem certeza que deseja excluir o curso "${course.title}"? Todos os módulos e aulas associados serão removidos.`)) {
+                        deleteCourseMutation.mutate(course.id);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-rose-500 hover:bg-rose-500/10 transition-colors"
+                    title="Excluir Curso"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -376,7 +469,124 @@ export function AdminCursosIndexPage() {
         </div>
       )}
 
-      {/* MODAL DE DUPLICAÇÃO DE MÓDULOS (Item 14) */}
+      {/* MODAL DE EDIÇÃO DE CURSO */}
+      {editModalOpen && editingCourseId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-in fade-in-50">
+          <div className="panel w-full max-w-lg p-6 space-y-4 bg-card border-primary/30 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <Edit className="size-5 text-primary" />
+                <h3 className="font-display text-lg font-bold">Editar Curso</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setEditModalOpen(false);
+                  setEditingCourseId(null);
+                }}
+                className="text-muted-foreground hover:text-foreground text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                updateCourseMutation.mutate();
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div>
+                <label className="font-bold text-foreground block mb-1">Nome do Curso *</label>
+                <input
+                  type="text"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, title: e.target.value }))}
+                  required
+                  className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-foreground block mb-1">Descrição</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
+                  rows={3}
+                  className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-foreground block mb-1">Categoria / Concurso</label>
+                  <input
+                    type="text"
+                    value={editForm.category}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, category: e.target.value }))}
+                    className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-foreground block mb-1">Posição na Listagem</label>
+                  <input
+                    type="number"
+                    value={editForm.position}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, position: Number(e.target.value) }))}
+                    min={1}
+                    className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-foreground block mb-1">URL da Imagem de Capa</label>
+                <input
+                  type="text"
+                  value={editForm.cover_url}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, cover_url: e.target.value }))}
+                  placeholder="/images/capa-padrao.png ou URL da imagem"
+                  className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-foreground block mb-1">Status</label>
+                <select
+                  value={editForm.status}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, status: e.target.value }))}
+                  className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                >
+                  <option value="published">Publicado (Visível aos Alunos Matriculados)</option>
+                  <option value="draft">Rascunho (Apenas Administradores)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditModalOpen(false);
+                    setEditingCourseId(null);
+                  }}
+                  className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateCourseMutation.isPending}
+                  className="glow-primary rounded-xl bg-primary px-5 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50"
+                >
+                  {updateCourseMutation.isPending ? "Salvando..." : "Salvar Alterações"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE DUPLICAÇÃO DE MÓDULOS */}
       {duplicateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-in fade-in-50">
           <div className="panel w-full max-w-lg p-6 space-y-5 bg-card border-primary/30 shadow-2xl">
@@ -398,103 +608,98 @@ export function AdminCursosIndexPage() {
             </p>
 
             <div className="space-y-4 text-xs">
-              {/* Curso de Origem */}
               <div>
-                <label className="block font-semibold text-muted-foreground mb-1">
-                  1. Curso de Origem
-                </label>
+                <label className="font-bold text-foreground block mb-1.5">1. Curso de Origem (De onde copiar)</label>
                 <select
                   value={sourceCourseId}
                   onChange={(e) => {
                     setSourceCourseId(e.target.value);
                     setSourceModuleId("");
                   }}
-                  className="w-full rounded-xl border border-border bg-background p-2.5 focus:border-primary focus:outline-none"
+                  className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
                 >
                   <option value="">Selecione o curso de origem...</option>
                   {courses.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.title}
+                      {c.title} ({c.category})
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Módulo a ser duplicado */}
-              <div>
-                <label className="block font-semibold text-muted-foreground mb-1">
-                  2. Módulo a Duplicar
-                </label>
-                <select
-                  value={sourceModuleId}
-                  onChange={(e) => setSourceModuleId(e.target.value)}
-                  disabled={!sourceCourseId}
-                  className="w-full rounded-xl border border-border bg-background p-2.5 focus:border-primary focus:outline-none disabled:opacity-50"
-                >
-                  <option value="">Selecione o módulo...</option>
-                  {sourceModules.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {sourceCourseId && (
+                <div>
+                  <label className="font-bold text-foreground block mb-1.5">2. Módulo a ser Duplicado</label>
+                  <select
+                    value={sourceModuleId}
+                    onChange={(e) => setSourceModuleId(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                  >
+                    <option value="">Selecione o módulo...</option>
+                    {sourceModules.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-              {/* Curso de Destino */}
-              <div>
-                <label className="block font-semibold text-muted-foreground mb-1">
-                  3. Curso de Destino (Receberá a cópia independente)
-                </label>
-                <select
-                  value={targetCourseId}
-                  onChange={(e) => setTargetCourseId(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background p-2.5 focus:border-primary focus:outline-none"
-                >
-                  <option value="">Selecione o curso de destino...</option>
-                  {courses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {sourceModuleId && (
+                <div>
+                  <label className="font-bold text-foreground block mb-1.5">3. Curso de Destino (Para onde copiar)</label>
+                  <select
+                    value={targetCourseId}
+                    onChange={(e) => setTargetCourseId(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                  >
+                    <option value="">Selecione o curso de destino...</option>
+                    {courses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title} ({c.category})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
-            {duplicateSuccess ? (
-              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-center text-xs font-bold text-emerald-400">
-                ✓ Módulo duplicado com sucesso com todas as aulas e questões!
-              </div>
-            ) : (
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setDuplicateModalOpen(false)}
-                  className="rounded-xl border border-border px-4 py-2 text-xs font-semibold hover:bg-secondary transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDuplicateModule}
-                  disabled={!sourceModuleId || !targetCourseId || isDuplicating}
-                  className="glow-primary inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50"
-                >
-                  {isDuplicating ? (
-                    <>
-                      <Loader2 className="size-3.5 animate-spin" /> Duplicando...
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="size-3.5" /> Confirmar Duplicação
-                    </>
-                  )}
-                </button>
+            {duplicateSuccess && (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-400">
+                ✓ Módulo, aulas e materiais duplicados com sucesso para o novo curso!
               </div>
             )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setDuplicateModalOpen(false)}
+                className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={handleDuplicateModule}
+                disabled={!sourceModuleId || !targetCourseId || isDuplicating || duplicateSuccess}
+                className="glow-primary inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50"
+              >
+                {isDuplicating ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" /> Duplicando Conteúdo...
+                  </>
+                ) : (
+                  <>
+                    <Copy className="size-3.5" /> Confirmar Duplicação
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
+
 export default AdminCursosIndexPage;
