@@ -39,8 +39,11 @@ function NovaAula() {
 
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!moduloId) return toast.error("Selecione o módulo");
-    setEnviando(true);
+    if (!moduloId) {
+      toast.error("Selecione o módulo");
+      return;
+    }
+
     try {
       let videoPath: string | null = null;
       if (video) {
