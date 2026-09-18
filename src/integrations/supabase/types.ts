@@ -230,7 +230,15 @@ export type Database = {
           published?: boolean
           title?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "modules_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -298,12 +306,14 @@ export type Database = {
           correct_index: number
           course_id: string | null
           created_at: string
+          difficulty: string | null
           explanation: string
           id: string
           lesson_id: string | null
           module_id: string | null
           options: Json
           statement: string
+          subject: string | null
         }
         Insert: {
           ano?: number | null
@@ -311,12 +321,14 @@ export type Database = {
           correct_index?: number
           course_id?: string | null
           created_at?: string
+          difficulty?: string | null
           explanation?: string
           id?: string
           lesson_id?: string | null
           module_id?: string | null
           options?: Json
           statement: string
+          subject?: string | null
         }
         Update: {
           ano?: number | null
@@ -324,14 +336,23 @@ export type Database = {
           correct_index?: number
           course_id?: string | null
           created_at?: string
+          difficulty?: string | null
           explanation?: string
           id?: string
           lesson_id?: string | null
           module_id?: string | null
           options?: Json
           statement?: string
+          subject?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "questions_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "questions_lesson_id_fkey"
             columns: ["lesson_id"]

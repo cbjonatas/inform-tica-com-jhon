@@ -22,8 +22,8 @@ export function CourseCard({
 
   return (
     <Link
-      to="/curso"
-      search={{ cursoId: id }}
+      to={"/curso" as any}
+      search={{ cursoId: id } as any}
       className="group relative flex flex-col overflow-hidden rounded-2xl border border-zinc-800/90 bg-[#0c0e12] shadow-2xl transition-all duration-300 hover:-translate-y-1 hover:border-zinc-700 hover:shadow-blue-950/20"
     >
       {/* Área da Imagem / Poster Vertical */}

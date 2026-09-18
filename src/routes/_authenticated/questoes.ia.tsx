@@ -223,13 +223,16 @@ function GeradorQuestoesIaPage() {
     setUserAnswers((prev) => ({ ...prev, [qId]: optIndex }));
 
     if (user?.id) {
-      await supabase.from("question_attempts").insert({
-        user_id: user.id,
-        question_id: null,
-        selected_index: optIndex,
-        is_correct: optIndex === correctIndex,
-      });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-multicourse"] });
+      const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(qId);
+      if (isValidUuid) {
+        await supabase.from("question_attempts").insert({
+          user_id: user.id,
+          question_id: qId,
+          selected_index: optIndex,
+          is_correct: optIndex === correctIndex,
+        });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-multicourse"] });
+      }
     }
   };
 
