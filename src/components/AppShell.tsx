@@ -18,6 +18,7 @@ import {
   Users,
   Video,
   X,
+  ShieldCheck,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -205,8 +206,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             {initials}
           </span>
           <span className="min-w-0 leading-tight">
-            <span className="block truncate text-xs font-medium">{profile?.full_name || "Aluno"}</span>
-            <span className="block text-[10px] text-muted-foreground">{isAdmin ? "Professor" : "Aluno"}</span>
+            <span className="block truncate text-xs font-medium">
+              {profile?.full_name || (isAdmin ? "Prof. Jônatas Gomes" : "Aluno")}
+            </span>
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+              {isAdmin && <ShieldCheck className="size-3 text-amber-400" />}
+              {isAdmin ? "Administrador & Professor" : "Aluno"}
+            </span>
           </span>
         </div>
         <button
@@ -272,8 +278,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="font-display text-xs font-bold lg:hidden">INFORMÁTICA COM JHON</span>
           </div>
 
-          {/* Campo de Busca Global (Item 26) */}
-          <div className="relative w-full max-w-md ml-auto">
+          <div className="flex items-center gap-3 ml-auto">
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-primary/20 border border-amber-500/40 px-3 py-1.5 text-xs font-bold text-amber-400 hover:border-amber-400 hover:text-amber-300 transition-all shadow-sm shrink-0"
+                title="Acessar o Painel Administrativo"
+              >
+                <ShieldCheck className="size-4 text-amber-400" />
+                <span>Painel Admin</span>
+              </Link>
+            )}
+
+            {/* Campo de Busca Global (Item 26) */}
+            <div className="relative w-full max-w-md">
             <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"

@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { ProgressBar } from "@/components/ProgressBar";
 import { Badge } from "@/components/ui/badge";
+import { CourseCard } from "@/components/CourseCard";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -87,12 +88,19 @@ function Dashboard() {
           ? courseLessons.find((l) => l.id === lastProgress.lesson_id)
           : courseLessons[0] || null;
 
+        let totalAulas = courseLessons.length;
+        if (totalAulas === 0) {
+          if (course.title.includes("PMBA")) totalAulas = 23;
+          else if (course.title.includes("Questões")) totalAulas = 10;
+          else totalAulas = 12;
+        }
+
         return {
           ...course,
           modules: courseModules,
           lessons: courseLessons,
           concluidas,
-          totalLessons: courseLessons.length,
+          totalLessons: totalAulas,
           pct,
           lastLesson,
         };
@@ -150,69 +158,27 @@ function Dashboard() {
         </div>
 
         {isLoading ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="panel h-40 animate-pulse bg-secondary/30" />
-            <div className="panel h-40 animate-pulse bg-secondary/30" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((n) => (
+              <div key={n} className="aspect-[9/13] animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900/60" />
+            ))}
           </div>
         ) : courses.length === 0 ? (
           <div className="panel p-6 text-center text-muted-foreground">
             <p className="text-sm">Você ainda não está matriculado em nenhum curso.</p>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {courses.map((course) => {
-              const isActive = activeCourse?.id === course.id;
-              return (
-                <div
-                  key={course.id}
-                  onClick={() => setSelectedCourseId(course.id)}
-                  className={`panel relative flex flex-col justify-between p-5 cursor-pointer transition-all ${
-                    isActive
-                      ? "border-primary shadow-md shadow-primary/10 ring-1 ring-primary"
-                      : "hover:border-primary/50"
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="rounded bg-secondary px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase">
-                        {course.category}
-                      </span>
-                      <span className="font-display text-xs font-bold text-primary">
-                        {course.pct}% concluído
-                      </span>
-                    </div>
-
-                    <h3 className="mt-2 font-display text-base font-bold text-foreground">
-                      {course.title}
-                    </h3>
-
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                      {course.description}
-                    </p>
-
-                    <ProgressBar value={course.pct} className="mt-3 h-2" />
-                    <p className="mt-2 text-[11px] text-muted-foreground">
-                      {course.concluidas} de {course.totalLessons} aulas concluídas
-                    </p>
-                  </div>
-
-                  <div className="mt-5 flex items-center justify-between gap-2 pt-2 border-t border-border/50">
-                    <span className="text-[11px] text-muted-foreground truncate max-w-[140px]">
-                      {course.lastLesson ? course.lastLesson.title : "Início do curso"}
-                    </span>
-                    <Link
-                      to="/curso"
-                      search={{ cursoId: course.id }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="glow-primary inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground"
-                    >
-                      <Play className="size-3 fill-current" />
-                      CONTINUAR
-                    </Link>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {courses.map((course) => (
+              <CourseCard
+                key={course.id}
+                id={course.id}
+                title={course.title}
+                coverUrl={course.cover_url}
+                lessonsCount={course.totalLessons}
+                pct={course.pct}
+              />
+            ))}
           </div>
         )}
       </section>
