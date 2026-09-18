@@ -38,18 +38,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       supabase.from("profiles").select("id, full_name, email, whatsapp").eq("id", uid).maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", uid),
     ]);
-    const userEmail = (p?.email || session?.user?.email || "").toLowerCase();
-    const isOwnerAdmin = userEmail === "professorjonatasg@gmail.com";
     setProfile((p as Profile) ?? null);
-    setIsAdmin(isOwnerAdmin || Boolean(roles?.some((r) => r.role === "admin")));
+    setIsAdmin(Boolean(roles?.some((r) => r.role === "admin")));
   };
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
-      if (s?.user?.email?.toLowerCase() === "professorjonatasg@gmail.com") {
-        setIsAdmin(true);
-      }
       setTimeout(() => {
         void loadExtras(s?.user?.id);
       }, 0);
@@ -57,9 +52,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
-      if (data.session?.user?.email?.toLowerCase() === "professorjonatasg@gmail.com") {
-        setIsAdmin(true);
-      }
       await loadExtras(data.session?.user?.id);
       setLoading(false);
     });

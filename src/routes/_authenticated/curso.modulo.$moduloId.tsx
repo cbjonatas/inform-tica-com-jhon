@@ -1,219 +1,84 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, CheckCircle2, Circle, Clock, Play, BookOpen } from "lucide-react";
+import { CheckCircle2, Circle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { ProgressBar } from "@/components/ProgressBar";
 
 export const Route = createFileRoute("/_authenticated/curso/modulo/$moduloId")({
   head: () => ({
     meta: [
-      { title: "Módulo do Curso — Informática com Jhon" },
-      { name: "description", content: "Acompanhe as aulas e seu progresso neste módulo." },
+      { title: "Módulo do curso — Informática com Jhon" },
+      { name: "description", content: "Aulas e progresso do módulo selecionado." },
+      { property: "og:title", content: "Módulo do curso — Informática com Jhon" },
+      { property: "og:description", content: "Veja as aulas e seu progresso neste módulo." },
     ],
   }),
-  component: ModuloDetailPage,
+  component: ModuloPage,
 });
 
-function ModuloDetailPage() {
+function ModuloPage() {
   const { moduloId } = Route.useParams();
 
-  const { data, isLoading } = useQuery({
+  const { data } = useQuery({
     queryKey: ["modulo", moduloId],
     queryFn: async () => {
-      const [modRes, lessonsRes, progressRes] = await Promise.all([
+      const [modulo, lessons, progress] = await Promise.all([
         supabase.from("modules").select("*").eq("id", moduloId).maybeSingle(),
         supabase.from("lessons").select("*").eq("module_id", moduloId).order("position"),
-        supabase.from("lesson_progress").select("lesson_id, completed, position_seconds"),
+        supabase.from("lesson_progress").select("lesson_id, completed"),
       ]);
-
-      let course = null;
-      if (modRes.data?.course_id) {
-        const courseRes = await supabase
-          .from("courses")
-          .select("id, title, category")
-          .eq("id", modRes.data.course_id)
-          .maybeSingle();
-        course = courseRes.data;
-      }
-
       return {
-        module: modRes.data,
-        course,
-        lessons: lessonsRes.data ?? [],
-        progress: progressRes.data ?? [],
+        modulo: modulo.data,
+        lessons: lessons.data ?? [],
+        progress: progress.data ?? [],
       };
     },
   });
 
-  const module = data?.module;
-  const course = data?.course;
-  const lessons = data?.lessons ?? [];
-  const progress = data?.progress ?? [];
-
-  const concluidasCount = lessons.filter((l) =>
-    progress.some((p) => p.lesson_id === l.id && p.completed)
+  const aulas = data?.lessons ?? [];
+  const feitas = aulas.filter((l) =>
+    (data?.progress ?? []).some((p) => p.lesson_id === l.id && p.completed),
   ).length;
-
-  const pct = lessons.length ? Math.round((concluidasCount / lessons.length) * 100) : 0;
-
-  // Próxima aula não concluída ou a primeira
-  const proximaAula =
-    lessons.find((l) => !progress.some((p) => p.lesson_id === l.id && p.completed)) ??
-    lessons[0];
-
-  if (isLoading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <p className="text-muted-foreground animate-pulse">Carregando módulo...</p>
-      </div>
-    );
-  }
-
-  if (!module) {
-    return (
-      <div className="panel p-8 text-center space-y-4">
-        <p className="text-lg font-semibold">Módulo não encontrado.</p>
-        <Link
-          to="/curso"
-          className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
-        >
-          <ArrowLeft className="size-4" /> Voltar para os módulos
-        </Link>
-      </div>
-    );
-  }
+  const pct = aulas.length ? Math.round((feitas / aulas.length) * 100) : 0;
 
   return (
-    <div className="space-y-8">
-      {/* Navegação de retorno e Breadcrumbs */}
-      <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-        <Link to="/meus-cursos" className="hover:text-foreground transition-colors">
-          Meus Cursos
-        </Link>
-        <span>/</span>
-        <Link
-          to="/curso"
-          search={module.course_id ? { cursoId: module.course_id } : undefined}
-          className="hover:text-foreground transition-colors font-semibold text-primary"
-        >
-          {course ? course.title : "Curso"}
-        </Link>
-        <span>/</span>
-        <span className="text-foreground truncate max-w-[200px]">{module.title}</span>
-      </div>
-
-      {/* Cabeçalho do Módulo */}
-      <header className="panel p-6 md:p-8 space-y-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-2 max-w-2xl">
-            <p className="text-xs font-semibold tracking-[0.25em] text-accent uppercase">
-              Módulo {String(module.position).padStart(2, "0")}
-            </p>
-            <h1 className="text-2xl font-bold md:text-3xl font-display">{module.title}</h1>
-            <p className="text-muted-foreground leading-relaxed">
-              {module.description || "Nenhuma descrição fornecida para este módulo."}
-            </p>
-          </div>
-
-          {proximaAula && (
-            <Link
-              to="/curso/aula/$aulaId"
-              params={{ aulaId: proximaAula.id }}
-              className="glow-primary inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground transition-transform hover:scale-[1.02]"
-            >
-              <Play className="size-4 fill-current" />
-              {concluidasCount > 0 ? "CONTINUAR MÓDULO" : "INICIAR MÓDULO"}
-            </Link>
-          )}
-        </div>
-
-        {/* Barra de Progresso */}
-        <div className="border-t border-border pt-4">
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-medium text-muted-foreground">Progresso de conclusão</span>
-            <span className="font-bold text-primary">{pct}%</span>
-          </div>
-          <ProgressBar value={pct} className="mt-2.5 h-2.5" />
-          <p className="mt-2 text-xs text-muted-foreground">
-            {concluidasCount} de {lessons.length} aulas concluídas
-          </p>
-        </div>
+    <div className="space-y-6">
+      <header className="panel p-6">
+        <p className="text-[11px] tracking-widest text-muted-foreground">MÓDULO</p>
+        <h1 className="mt-1 font-display text-2xl font-bold md:text-3xl">{data?.modulo?.title ?? "Carregando..."}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{data?.modulo?.description}</p>
+        <ProgressBar value={pct} className="mt-4" />
+        <p className="mt-2 text-xs text-muted-foreground">{pct}% concluído · {aulas.length} aulas</p>
       </header>
 
-      {/* Lista de Aulas */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold font-display flex items-center gap-2">
-            <BookOpen className="size-5 text-primary" /> Conteúdo do Módulo
-          </h2>
-          <span className="text-xs text-muted-foreground">{lessons.length} aulas disponíveis</span>
-        </div>
-
-        <div className="space-y-3">
-          {lessons.map((aula, index) => {
-            const userProg = progress.find((p) => p.lesson_id === aula.id);
-            const isCompleted = Boolean(userProg?.completed);
-
-            return (
-              <Link
-                key={aula.id}
-                to="/curso/aula/$aulaId"
-                params={{ aulaId: aula.id }}
-                className="panel block p-4 md:p-5 transition-all hover:border-primary hover:bg-secondary/20"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-4 min-w-0">
-                    {/* Status visual explícito: ✓ Concluída ou ○ Não concluída */}
-                    {isCompleted ? (
-                      <div className="flex items-center gap-1.5 shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-500">
-                        <CheckCircle2 className="size-4" />
-                        <span className="hidden sm:inline">Concluída</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 shrink-0 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                        <Circle className="size-4" />
-                        <span className="hidden sm:inline">Não concluída</span>
-                      </div>
-                    )}
-
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                        Aula {String(index + 1).padStart(2, "0")}
-                      </p>
-                      <h3 className="font-medium text-foreground truncate text-base">
-                        {aula.title}
-                      </h3>
-                      {aula.description && (
-                        <p className="line-clamp-1 text-xs text-muted-foreground mt-0.5">
-                          {aula.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 shrink-0">
-                    {aula.duration_seconds > 0 && (
-                      <span className="hidden md:flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="size-3.5" />
-                        {Math.round(aula.duration_seconds / 60)} min
-                      </span>
-                    )}
-                    <span className="inline-flex size-8 items-center justify-center rounded-lg bg-secondary text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                      <Play className="size-3.5 fill-current" />
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-
-          {lessons.length === 0 && (
-            <div className="panel p-8 text-center text-muted-foreground text-sm">
-              Nenhuma aula cadastrada neste módulo ainda.
-            </div>
-          )}
-        </div>
-      </section>
+      <div className="space-y-2">
+        {aulas.map((aula, i) => {
+          const concluida = (data?.progress ?? []).some((p) => p.lesson_id === aula.id && p.completed);
+          return (
+            <Link
+              key={aula.id}
+              to="/curso/aula/$aulaId"
+              params={{ aulaId: aula.id }}
+              className="panel flex items-center gap-4 p-4 transition-colors hover:border-primary"
+            >
+              {concluida ? (
+                <CheckCircle2 className="size-5 shrink-0 text-success" />
+              ) : (
+                <Circle className="size-5 shrink-0 text-muted-foreground" />
+              )}
+              <div className="min-w-0">
+                <p className="text-[11px] tracking-widest text-muted-foreground">
+                  AULA {String(i + 1).padStart(2, "0")}
+                </p>
+                <p className="truncate font-medium">{aula.title}</p>
+              </div>
+              <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                {concluida ? "Concluída" : "Não concluída"}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
