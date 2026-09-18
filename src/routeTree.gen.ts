@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as RecuperarSenhaRouteImport } from './routes/recuperar-senha'
 import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedIaRouteImport } from './routes/_authenticated/ia'
 import { Route as AuthenticatedQuestoesRouteImport } from './routes/_authenticated/questoes'
 import { Route as AuthenticatedCursoIndexRouteImport } from './routes/_authenticated/curso.index'
 import { Route as AuthenticatedCursoAulaAulaIdRouteImport } from './routes/_authenticated/curso.aula.$aulaId'
@@ -55,6 +56,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedIaRoute = AuthenticatedIaRouteImport.update({
+  id: '/ia',
+  path: '/ia',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedQuestoesRoute = AuthenticatedQuestoesRouteImport.update({
   id: '/questoes',
   path: '/questoes',
@@ -85,6 +91,7 @@ export interface FileRoutesByFullPath {
   '/recuperar-senha': typeof RecuperarSenhaRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/ia': typeof AuthenticatedIaRoute
   '/questoes': typeof AuthenticatedQuestoesRoute
   '/curso/': typeof AuthenticatedCursoIndexRoute
   '/curso/aula/$aulaId': typeof AuthenticatedCursoAulaAulaIdRoute
@@ -97,6 +104,7 @@ export interface FileRoutesByTo {
   '/recuperar-senha': typeof RecuperarSenhaRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/ia': typeof AuthenticatedIaRoute
   '/questoes': typeof AuthenticatedQuestoesRoute
   '/curso': typeof AuthenticatedCursoIndexRoute
   '/curso/aula/$aulaId': typeof AuthenticatedCursoAulaAulaIdRoute
@@ -111,6 +119,7 @@ export interface FileRoutesById {
   '/recuperar-senha': typeof RecuperarSenhaRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/ia': typeof AuthenticatedIaRoute
   '/_authenticated/questoes': typeof AuthenticatedQuestoesRoute
   '/_authenticated/curso/': typeof AuthenticatedCursoIndexRoute
   '/_authenticated/curso/aula/$aulaId': typeof AuthenticatedCursoAulaAulaIdRoute
@@ -125,6 +134,7 @@ export interface FileRouteTypes {
     | '/recuperar-senha'
     | '/redefinir-senha'
     | '/dashboard'
+    | '/ia'
     | '/questoes'
     | '/curso/'
     | '/curso/aula/$aulaId'
@@ -137,6 +147,7 @@ export interface FileRouteTypes {
     | '/recuperar-senha'
     | '/redefinir-senha'
     | '/dashboard'
+    | '/ia'
     | '/questoes'
     | '/curso'
     | '/curso/aula/$aulaId'
@@ -150,6 +161,7 @@ export interface FileRouteTypes {
     | '/recuperar-senha'
     | '/redefinir-senha'
     | '/_authenticated/dashboard'
+    | '/_authenticated/ia'
     | '/_authenticated/questoes'
     | '/_authenticated/curso/'
     | '/_authenticated/curso/aula/$aulaId'
@@ -216,6 +228,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/ia': {
+      id: '/_authenticated/ia'
+      path: '/ia'
+      fullPath: '/ia'
+      preLoaderRoute: typeof AuthenticatedIaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/questoes': {
       id: '/_authenticated/questoes'
       path: '/questoes'
@@ -249,6 +268,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedIaRoute: typeof AuthenticatedIaRoute
   AuthenticatedQuestoesRoute: typeof AuthenticatedQuestoesRoute
   AuthenticatedCursoIndexRoute: typeof AuthenticatedCursoIndexRoute
   AuthenticatedCursoAulaAulaIdRoute: typeof AuthenticatedCursoAulaAulaIdRoute
@@ -257,6 +277,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedIaRoute: AuthenticatedIaRoute,
   AuthenticatedQuestoesRoute: AuthenticatedQuestoesRoute,
   AuthenticatedCursoIndexRoute: AuthenticatedCursoIndexRoute,
   AuthenticatedCursoAulaAulaIdRoute: AuthenticatedCursoAulaAulaIdRoute,
