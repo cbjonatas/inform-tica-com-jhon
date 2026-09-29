@@ -8,8 +8,8 @@ import { ProgressBar } from "@/components/ProgressBar";
 import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_authenticated/curso/")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    cursoId: typeof search.cursoId === "string" ? search.cursoId : undefined,
+  validateSearch: (search: Record<string, unknown>): { cursoId?: string } => ({
+    ...(typeof search.cursoId === "string" ? { cursoId: search.cursoId } : {}),
   }),
   head: () => ({
     meta: [

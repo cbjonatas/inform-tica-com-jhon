@@ -64,7 +64,7 @@ export function AdminAlunosPage() {
       });
 
       lessons.forEach((l: any) => {
-        const cId = l.modules?.course_id;
+        const cId = Array.isArray(l.modules) ? l.modules[0]?.course_id : l.modules?.course_id;
         if (cId) {
           const list = lessonsPerCourse[cId];
           if (list) {

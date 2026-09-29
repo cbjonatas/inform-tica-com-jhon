@@ -86,12 +86,13 @@ function AulaDetailPage() {
       const lesson = lessonRes.data;
       if (!lesson) return null;
 
+      const moduleObj = (Array.isArray(lesson.modules) ? lesson.modules[0] : lesson.modules) as any;
       let course = null;
-      if (lesson.modules?.course_id) {
+      if (moduleObj?.course_id) {
         const courseRes = await supabase
           .from("courses")
           .select("id, title")
-          .eq("id", lesson.modules.course_id)
+          .eq("id", moduleObj.course_id)
           .maybeSingle();
         course = courseRes.data;
       }
@@ -121,7 +122,7 @@ function AulaDetailPage() {
 
       return {
         lesson,
-        module: lesson.modules,
+        module: moduleObj,
         course,
         siblings: siblingsRes.data ?? [],
         progress: progressRes.data,
