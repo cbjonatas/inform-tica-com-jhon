@@ -63,10 +63,32 @@ export function NovoCursoPage() {
     }
   };
 
-  const handleCoverUpload = (file: File) => {
-    // Simulação ou upload real para storage
-    const fakeUrl = URL.createObjectURL(file);
-    setCoverUrl(fakeUrl);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+
+  const handleCoverUpload = async (file: File | null) => {
+    setCoverFile(file);
+    if (!file) return;
+    setUploadingCover(true);
+    setErrorMsg("");
+    try {
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `cursos/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("capas")
+        .upload(path, file, { upsert: false, contentType: file.type });
+      if (error) throw error;
+      const { data, error: sErr } = await supabase.storage
+        .from("capas")
+        .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+      if (sErr || !data) throw sErr ?? new Error("Falha ao gerar link da capa");
+      setCoverUrl(data.signedUrl);
+    } catch (err: any) {
+      setErrorMsg(`Erro ao enviar a capa: ${err?.message ?? "tente novamente"}`);
+      setCoverFile(null);
+    } finally {
+      setUploadingCover(false);
+    }
   };
 
   return (
@@ -135,13 +157,21 @@ export function NovoCursoPage() {
             Imagem / Capa do Curso
           </label>
           <div className="grid gap-4 sm:grid-cols-[1.5fr_1fr]">
-            <UploadArea
-              accept={{ "image/*": [".jpg", ".jpeg", ".png", ".webp"] }}
-              maxSizeMb={5}
-              label="Arraste a imagem de capa ou clique para selecionar"
-              sublabel="PNG, JPG ou WEBP até 5MB"
-              onFileSelect={handleCoverUpload}
-            />
+            <div className="space-y-1">
+              <UploadArea
+                accept="image/png,image/jpeg,image/webp"
+                maxSizeMB={5}
+                label="Capa do curso"
+                fileTypeLabel="PNG, JPG ou WEBP"
+                selectedFile={coverFile}
+                onFileSelected={handleCoverUpload}
+              />
+              {uploadingCover && (
+                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <Loader2 className="size-3 animate-spin" /> Enviando capa...
+                </p>
+              )}
+            </div>
 
             <div className="flex flex-col justify-between rounded-xl border border-border bg-secondary/20 p-4">
               <div>

@@ -8,8 +8,8 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_authenticated/ia")({
-  validateSearch: (search: Record<string, unknown>): { cursoId?: string } => ({
-    ...(typeof search.cursoId === "string" ? { cursoId: search.cursoId } : {}),
+  validateSearch: (search: Record<string, unknown>) => ({
+    cursoId: typeof search.cursoId === "string" ? search.cursoId : undefined,
   }),
   head: () => ({
     meta: [

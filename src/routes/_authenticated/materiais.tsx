@@ -61,13 +61,12 @@ function MateriaisPage() {
       // Adicionar PDFs das aulas
       (lessonsRes.data ?? []).forEach((l: any) => {
         if (l.pdf_url) {
-          const modTitle = Array.isArray(l.modules) ? l.modules[0]?.title : l.modules?.title;
           items.push({
             id: `lesson-${l.id}`,
             title: `Apostila Oficial — ${l.title}`,
             type: "apostila",
             url: l.pdf_url,
-            moduleTitle: modTitle || "Módulo Geral",
+            moduleTitle: l.modules?.title || "Módulo Geral",
             lessonTitle: l.title,
             lessonId: l.id,
           });
@@ -76,15 +75,13 @@ function MateriaisPage() {
 
       // Adicionar Materiais complementares
       (materialsRes.data ?? []).forEach((m: any) => {
-        const lessonObj = Array.isArray(m.lessons) ? m.lessons[0] : m.lessons;
-        const modObj = Array.isArray(lessonObj?.modules) ? lessonObj?.modules[0] : lessonObj?.modules;
         items.push({
           id: m.id,
           title: m.title,
           type: "complementar",
           url: m.file_url,
-          moduleTitle: modObj?.title || "Módulo Geral",
-          lessonTitle: lessonObj?.title || "Aula",
+          moduleTitle: m.lessons?.modules?.title || "Módulo Geral",
+          lessonTitle: m.lessons?.title || "Aula",
           lessonId: m.lesson_id,
         });
       });

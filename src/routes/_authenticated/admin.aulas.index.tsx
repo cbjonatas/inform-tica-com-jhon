@@ -189,7 +189,7 @@ function AdminAulasIndexPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-accent">
-                    {(Array.isArray(aula.modules) ? aula.modules[0]?.title : aula.modules?.title) || "Módulo"}
+                    {aula.modules?.title || "Módulo"}
                   </span>
                   <span
                     className={cn(

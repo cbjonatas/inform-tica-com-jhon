@@ -94,16 +94,21 @@ function NovaAulaPage() {
         setStep("processing_video");
         setProgress(20);
 
-        const videoExt = videoFile.name.split(".").pop();
+        const videoExt = videoFile.name.split(".").pop() || "mp4";
         const videoPath = `${moduleId}/${Date.now()}_video.${videoExt}`;
 
-        await supabase.storage.from("videoaulas").upload(videoPath, videoFile, {
+        const { error: vErr } = await supabase.storage.from("videoaulas").upload(videoPath, videoFile, {
           cacheControl: "3600",
           upsert: false,
+          contentType: videoFile.type || "video/mp4",
         });
+        if (vErr) throw new Error(`Falha no envio do vídeo: ${vErr.message}`);
 
-        const { data: vPublic } = supabase.storage.from("videoaulas").getPublicUrl(videoPath);
-        finalVideoUrl = vPublic?.publicUrl || "";
+        const { data: vSigned, error: vsErr } = await supabase.storage
+          .from("videoaulas")
+          .createSignedUrl(videoPath, 60 * 60 * 24 * 365 * 10);
+        if (vsErr || !vSigned) throw new Error("Não foi possível gerar o link do vídeo.");
+        finalVideoUrl = vSigned.signedUrl;
       }
 
       // 2. Processando PDF (Item 29)
@@ -111,12 +116,17 @@ function NovaAulaPage() {
         setStep("processing_pdf");
         setProgress(40);
 
-        const pdfExt = pdfFile.name.split(".").pop();
-        const pdfPath = `apostilas/${Date.now()}_${pdfFile.name}`;
+        const safeName = pdfFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const pdfPath = `apostilas/${Date.now()}_${safeName}`;
 
-        await supabase.storage.from("materiais").upload(pdfPath, pdfFile, { upsert: false });
-        const { data: pPublic } = supabase.storage.from("materiais").getPublicUrl(pdfPath);
-        finalPdfUrl = pPublic?.publicUrl || "";
+        const { error: pErr } = await supabase.storage
+          .from("materiais")
+          .upload(pdfPath, pdfFile, { upsert: false, contentType: "application/pdf" });
+        if (pErr) throw new Error(`Falha no envio do PDF: ${pErr.message}`);
+        const { data: pSigned } = await supabase.storage
+          .from("materiais")
+          .createSignedUrl(pdfPath, 60 * 60 * 24 * 365 * 10);
+        finalPdfUrl = pSigned?.signedUrl || "";
       }
 
       // Posição no módulo
@@ -257,7 +267,7 @@ function NovaAulaPage() {
       <ProcessingStatus
         currentStep={step}
         progressPercent={progress}
-        errorMessage={errorMessage || undefined}
+        {...(errorMessage ? { errorMessage } : {})}
         onRetry={() => {
           setStep("idle");
           setErrorMessage(null);
