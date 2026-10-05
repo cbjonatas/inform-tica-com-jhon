@@ -6,3 +6,4 @@
 - [x] Upload da capa do curso (storage + vínculo)
 - [x] Upload de videoaulas (storage + vínculo ao módulo)
 - [x] Testar fluxo: criar curso → capa → módulo → videoaula → reproduzir
+- [x] Definir professorjonatasg@gmail.com como admin e enviar link do painel
