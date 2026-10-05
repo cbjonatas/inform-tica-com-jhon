@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import {
   ArrowLeft,
   Bookmark,
+  BookOpen,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -26,6 +27,7 @@ import { TranscriptViewer } from "@/components/TranscriptViewer";
 import { QuestionCard } from "@/components/QuestionCard";
 import { PdfViewer } from "@/components/PdfViewer";
 import { AIChat } from "@/components/AIChat";
+import { LessonCard } from "@/components/LessonCard";
 import { aiService } from "@/lib/ai/ai-service";
 
 export const Route = createFileRoute("/_authenticated/curso/aula/$aulaId")({
@@ -91,7 +93,7 @@ function AulaDetailPage() {
       if (moduleObj?.course_id) {
         const courseRes = await supabase
           .from("courses")
-          .select("id, title")
+          .select("id, title, cover_url")
           .eq("id", moduleObj.course_id)
           .maybeSingle();
         course = courseRes.data;
@@ -99,7 +101,7 @@ function AulaDetailPage() {
 
       const siblingsRes = await supabase
         .from("lessons")
-        .select("id, title, position")
+        .select("id, title, position, duration_seconds, cover_url, subject, part")
         .eq("module_id", lesson.module_id)
         .order("position");
 
@@ -687,6 +689,40 @@ function AulaDetailPage() {
           )}
         </div>
       </section>
+
+      {/* 4. OUTRAS AULAS DESTE MÓDULO (CAPAS VERTICAIS) */}
+      {siblings.length > 1 && (
+        <section className="space-y-4 pt-8 border-t border-border/40">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold font-display flex items-center gap-2 text-white">
+              <BookOpen className="size-5 text-primary" /> Outras Aulas deste Módulo
+            </h2>
+            <Link
+              to="/curso/modulo/$moduloId"
+              params={{ moduloId: lesson.module_id }}
+              className="text-xs text-primary hover:underline font-semibold"
+            >
+              Ver Todas no Módulo
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {siblings.map((sib: any, idx: number) => (
+              <LessonCard
+                key={sib.id}
+                id={sib.id}
+                title={sib.title}
+                subject={sib.subject}
+                part={sib.part}
+                coverUrl={sib.cover_url || courseData?.cover_url}
+                durationSeconds={sib.duration_seconds}
+                completed={sib.id === aulaId ? Boolean(progress?.completed) : false}
+                position={idx + 1}
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { ArrowLeft, CheckCircle2, GraduationCap, Image as ImageIcon, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCircle2, GraduationCap, Image as ImageIcon, Loader2, PlusCircle, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { UploadArea } from "@/components/UploadArea";
@@ -19,15 +19,26 @@ export function NovoCursoPage() {
   const { isAdmin } = useAuth();
   const navigate = useNavigate();
 
-  // Campos do formulário (Item 2 da especificação)
+  // Campos do formulário
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [coverUrl, setCoverUrl] = useState("");
+  const [coverFile, setCoverFile] = useState<File | null>(null);
   const [category, setCategory] = useState("Carreiras Policiais");
   const [status, setStatus] = useState<"draft" | "published">("published");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  const [actionAfter, setActionAfter] = useState<"add_lessons" | "index">("add_lessons");
+
+  const handleCoverFileSelected = (file: File | null) => {
+    setCoverFile(file);
+    if (file) {
+      const localPreview = URL.createObjectURL(file);
+      setCoverUrl(localPreview);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,12 +51,36 @@ export function NovoCursoPage() {
     setErrorMsg("");
 
     try {
+      let finalCoverUrl = coverUrl.trim();
+
+      // Se enviou arquivo de capa, fazer upload para Supabase Storage
+      if (coverFile) {
+        const fileExt = coverFile.name.split(".").pop();
+        const filePath = `capas-cursos/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("materiais")
+          .upload(filePath, coverFile, { upsert: false });
+
+        if (!uploadError) {
+          const { data: publicData } = supabase.storage.from("materiais").getPublicUrl(filePath);
+          if (publicData?.publicUrl) {
+            finalCoverUrl = publicData.publicUrl;
+          }
+        }
+      }
+
+      // Se ainda não tiver capa, usar capa padrão do sistema
+      if (!finalCoverUrl) {
+        finalCoverUrl = "/images/capa-padrao.png";
+      }
+
       const { data, error } = await supabase
         .from("courses")
         .insert({
           title: title.trim(),
           description: description.trim(),
-          cover_url: coverUrl.trim() || "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=800&q=80",
+          cover_url: finalCoverUrl,
           category: category.trim(),
           status,
         })
@@ -54,7 +89,11 @@ export function NovoCursoPage() {
 
       if (error) throw error;
 
-      navigate({ to: "/admin/cursos" });
+      if (actionAfter === "add_lessons" && data?.id) {
+        navigate({ to: "/admin/aulas/nova" as any, search: { cursoId: data.id } as any });
+      } else {
+        navigate({ to: "/admin/cursos" });
+      }
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Erro ao criar o curso. Verifique as permissões.");
@@ -63,11 +102,17 @@ export function NovoCursoPage() {
     }
   };
 
-  const handleCoverUpload = (file: File) => {
-    // Simulação ou upload real para storage
-    const fakeUrl = URL.createObjectURL(file);
-    setCoverUrl(fakeUrl);
-  };
+  if (!isAdmin) {
+    return (
+      <div className="panel p-8 text-center space-y-4 max-w-md mx-auto my-12">
+        <h2 className="text-xl font-bold font-display">Acesso Restrito</h2>
+        <p className="text-sm text-muted-foreground">Esta página é restrita a administradores.</p>
+        <Link to="/meus-cursos" className="inline-block rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground">
+          Voltar aos Meus Cursos
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-12">
@@ -92,7 +137,7 @@ export function NovoCursoPage() {
         </div>
       </div>
 
-      {/* Formulário (Item 2) */}
+      {/* Formulário */}
       <form onSubmit={handleSubmit} className="panel p-6 md:p-8 space-y-6">
         {errorMsg && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-500">
@@ -110,7 +155,7 @@ export function NovoCursoPage() {
             required
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Ex: INFORMÁTICA PARA PMBA, INFORMÁTICA PARA POLÍCIA FEDERAL..."
+            placeholder="Ex: INFORMÁTICA PARA PMBA, INFORMÁTICA PARA PCBA, INFORMÁTICA PARA PF..."
             className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm focus:border-primary focus:outline-none"
           />
         </div>
@@ -124,7 +169,7 @@ export function NovoCursoPage() {
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Descreva os objetivos, a banca e o foco das matérias deste curso..."
+            placeholder="Descreva os objetivos, o foco do edital e as bancas abordadas neste curso..."
             className="w-full rounded-xl border border-border bg-background p-4 text-sm focus:border-primary focus:outline-none resize-none"
           />
         </div>
@@ -136,11 +181,12 @@ export function NovoCursoPage() {
           </label>
           <div className="grid gap-4 sm:grid-cols-[1.5fr_1fr]">
             <UploadArea
-              accept={{ "image/*": [".jpg", ".jpeg", ".png", ".webp"] }}
-              maxSizeMb={5}
-              label="Arraste a imagem de capa ou clique para selecionar"
-              sublabel="PNG, JPG ou WEBP até 5MB"
-              onFileSelect={handleCoverUpload}
+              label="Capa do Curso"
+              accept="image/*"
+              maxSizeMB={5}
+              fileTypeLabel=".jpg, .png, .webp"
+              selectedFile={coverFile}
+              onFileSelected={handleCoverFileSelected}
             />
 
             <div className="flex flex-col justify-between rounded-xl border border-border bg-secondary/20 p-4">
@@ -156,12 +202,12 @@ export function NovoCursoPage() {
               </div>
 
               {coverUrl ? (
-                <div className="mt-3 aspect-video w-full overflow-hidden rounded-lg border border-border bg-secondary">
+                <div className="mt-3 aspect-[9/13] max-h-44 w-auto self-center overflow-hidden rounded-lg border border-border bg-secondary shadow-md">
                   <img src={coverUrl} alt="Preview da capa" className="size-full object-cover" />
                 </div>
               ) : (
-                <div className="mt-3 grid aspect-video w-full place-items-center rounded-lg border border-dashed border-border text-muted-foreground text-[11px]">
-                  Prévia da capa
+                <div className="mt-3 grid aspect-[9/13] max-h-44 w-28 self-center place-items-center rounded-lg border border-dashed border-border text-muted-foreground text-[11px] text-center p-2">
+                  Prévia da capa vertical
                 </div>
               )}
             </div>
@@ -172,7 +218,7 @@ export function NovoCursoPage() {
           {/* Categoria */}
           <div className="space-y-1.5">
             <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Categoria
+              Categoria / Concurso
             </label>
             <select
               value={category}
@@ -219,13 +265,13 @@ export function NovoCursoPage() {
               </label>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Cursos em rascunho são visíveis apenas para a administração.
+              Cursos em rascunho são visíveis apenas para administradores.
             </p>
           </div>
         </div>
 
-        {/* Botão de Envio */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+        {/* Botões de Ação */}
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-border">
           <Link
             to="/admin/cursos"
             className="rounded-xl border border-border px-5 py-2.5 text-xs font-semibold hover:bg-secondary transition-colors"
@@ -234,6 +280,15 @@ export function NovoCursoPage() {
           </Link>
           <button
             type="submit"
+            onClick={() => setActionAfter("index")}
+            disabled={isSubmitting}
+            className="rounded-xl border border-border bg-secondary/80 px-5 py-2.5 text-xs font-bold text-foreground hover:bg-secondary transition-colors disabled:opacity-50"
+          >
+            Salvar e Voltar
+          </button>
+          <button
+            type="submit"
+            onClick={() => setActionAfter("add_lessons")}
             disabled={isSubmitting}
             className="glow-primary inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-xs font-bold text-primary-foreground transition-opacity hover:opacity-95 disabled:opacity-50"
           >
@@ -243,7 +298,7 @@ export function NovoCursoPage() {
               </>
             ) : (
               <>
-                <GraduationCap className="size-4" /> CRIAR CURSO
+                <PlusCircle className="size-4" /> CRIAR CURSO E INSERIR AULAS
               </>
             )}
           </button>

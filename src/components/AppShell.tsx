@@ -197,6 +197,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             <PlusCircle className="size-4" />
             Novo Curso
           </Link>
+          <Link
+            to="/admin/aulas/nova"
+            onClick={() => setOpen(false)}
+            activeProps={{ className: "bg-secondary text-foreground font-semibold" }}
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <PlusCircle className="size-4 text-blue-400" />
+            Inserir Videoaula
+          </Link>
         </>
       )}
 

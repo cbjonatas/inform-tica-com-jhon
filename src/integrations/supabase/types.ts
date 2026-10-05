@@ -122,14 +122,17 @@ export type Database = {
       }
       lessons: {
         Row: {
+          cover_url: string | null
           created_at: string
           description: string
           duration_seconds: number
           id: string
           module_id: string
+          part: string | null
           pdf_url: string | null
           position: number
           published: boolean
+          subject: string | null
           summary: string | null
           title: string
           transcript: string
@@ -138,14 +141,17 @@ export type Database = {
           video_url: string | null
         }
         Insert: {
+          cover_url?: string | null
           created_at?: string
           description?: string
           duration_seconds?: number
           id?: string
           module_id: string
+          part?: string | null
           pdf_url?: string | null
           position?: number
           published?: boolean
+          subject?: string | null
           summary?: string | null
           title: string
           transcript?: string
@@ -154,14 +160,17 @@ export type Database = {
           video_url?: string | null
         }
         Update: {
+          cover_url?: string | null
           created_at?: string
           description?: string
           duration_seconds?: number
           id?: string
           module_id?: string
+          part?: string | null
           pdf_url?: string | null
           position?: number
           published?: boolean
+          subject?: string | null
           summary?: string | null
           title?: string
           transcript?: string

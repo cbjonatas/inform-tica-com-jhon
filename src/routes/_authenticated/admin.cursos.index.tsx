@@ -395,6 +395,14 @@ export function AdminCursosIndexPage() {
                       <span className="text-[10px] text-muted-foreground">Alunos</span>
                     </div>
                   </div>
+
+                  <Link
+                    to="/admin/aulas/nova"
+                    search={{ cursoId: course.id } as any}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-blue-500/40 bg-blue-600/10 py-2 text-xs font-bold text-blue-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                  >
+                    <PlusCircle className="size-3.5" /> Inserir Vídeo Aula neste Curso
+                  </Link>
                 </div>
               </div>
 

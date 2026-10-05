@@ -181,16 +181,29 @@ function AdminAulasIndexPage() {
               !aula.published && "opacity-60 bg-secondary/10"
             )}
           >
-            <div className="flex items-start gap-3.5">
-              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary font-mono text-xs font-bold text-muted-foreground">
-                #{aula.position}
-              </span>
+            <div className="flex items-start gap-3.5 min-w-0">
+              {/* Thumbnail Vertical da Capa */}
+              <div className="relative aspect-[9/13] w-11 sm:w-14 shrink-0 overflow-hidden rounded-lg border border-border bg-secondary shadow-sm">
+                <img
+                  src={aula.cover_url || "/images/capa-padrao.png"}
+                  alt={aula.title}
+                  className="size-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = "/images/capa-padrao.png";
+                  }}
+                />
+              </div>
 
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-accent">
                     {(Array.isArray(aula.modules) ? aula.modules[0]?.title : aula.modules?.title) || "Módulo"}
                   </span>
+                  {aula.part && (
+                    <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-bold text-blue-400">
+                      {aula.part}
+                    </span>
+                  )}
                   <span
                     className={cn(
                       "rounded-full px-2 py-0.5 text-[10px] font-bold",
@@ -203,9 +216,9 @@ function AdminAulasIndexPage() {
                   </span>
                 </div>
 
-                <h3 className="font-semibold text-foreground text-base mt-0.5">{aula.title}</h3>
+                <h3 className="font-semibold text-foreground text-sm sm:text-base mt-0.5 truncate">{aula.title}</h3>
                 <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                  {aula.description || "Sem descrição"}
+                  {aula.description || (aula.subject ? `Assunto: ${aula.subject}` : "Sem descrição")}
                 </p>
               </div>
             </div>

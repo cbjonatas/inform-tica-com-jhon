@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, CheckCircle2, Circle, Clock, Play, BookOpen } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Circle, Clock, Play, BookOpen, LayoutGrid, List } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { ProgressBar } from "@/components/ProgressBar";
+import { LessonCard } from "@/components/LessonCard";
 
 export const Route = createFileRoute("/_authenticated/curso/modulo/$moduloId")({
   head: () => ({
@@ -16,6 +18,7 @@ export const Route = createFileRoute("/_authenticated/curso/modulo/$moduloId")({
 
 function ModuloDetailPage() {
   const { moduloId } = Route.useParams();
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   const { data, isLoading } = useQuery({
     queryKey: ["modulo", moduloId],
@@ -140,79 +143,132 @@ function ModuloDetailPage() {
         </div>
       </header>
 
-      {/* Lista de Aulas */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold font-display flex items-center gap-2">
-            <BookOpen className="size-5 text-primary" /> Conteúdo do Módulo
-          </h2>
-          <span className="text-xs text-muted-foreground">{lessons.length} aulas disponíveis</span>
+      {/* Lista de Aulas / Grid de Capas Verticais */}
+      <section className="space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/40 pb-4">
+          <div>
+            <h2 className="text-xl font-bold font-display flex items-center gap-2 text-white">
+              <BookOpen className="size-5 text-primary" /> Aulas do Módulo
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {lessons.length} {lessons.length === 1 ? "aula disponível" : "aulas disponíveis"} com capas verticais
+            </p>
+          </div>
+
+          {/* Alternador de Modo de Visualização */}
+          <div className="flex items-center gap-1.5 self-start sm:self-auto rounded-xl border border-zinc-800 bg-[#0c0e12] p-1">
+            <button
+              onClick={() => setViewMode("grid")}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                viewMode === "grid"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+              title="Exibir Capas na Vertical"
+            >
+              <LayoutGrid className="size-3.5" />
+              <span>Capas Verticais</span>
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                viewMode === "list"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+              title="Exibir Lista"
+            >
+              <List className="size-3.5" />
+              <span>Lista</span>
+            </button>
+          </div>
         </div>
 
-        <div className="space-y-3">
-          {lessons.map((aula, index) => {
-            const userProg = progress.find((p) => p.lesson_id === aula.id);
-            const isCompleted = Boolean(userProg?.completed);
+        {lessons.length === 0 ? (
+          <div className="panel p-8 text-center text-muted-foreground text-sm">
+            Nenhuma aula cadastrada neste módulo ainda.
+          </div>
+        ) : viewMode === "grid" ? (
+          /* Grid de Capas Verticais (Todas na vertical) */
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {lessons.map((aula, index) => {
+              const userProg = progress.find((p) => p.lesson_id === aula.id);
+              return (
+                <LessonCard
+                  key={aula.id}
+                  id={aula.id}
+                  title={aula.title}
+                  subject={aula.subject}
+                  part={aula.part}
+                  coverUrl={aula.cover_url || course?.cover_url}
+                  durationSeconds={aula.duration_seconds}
+                  completed={Boolean(userProg?.completed)}
+                  positionSeconds={userProg?.position_seconds || 0}
+                  position={index + 1}
+                />
+              );
+            })}
+          </div>
+        ) : (
+          /* Visualização alternativa em Lista */
+          <div className="space-y-3">
+            {lessons.map((aula, index) => {
+              const userProg = progress.find((p) => p.lesson_id === aula.id);
+              const isCompleted = Boolean(userProg?.completed);
 
-            return (
-              <Link
-                key={aula.id}
-                to="/curso/aula/$aulaId"
-                params={{ aulaId: aula.id }}
-                className="panel block p-4 md:p-5 transition-all hover:border-primary hover:bg-secondary/20"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-4 min-w-0">
-                    {/* Status visual explícito: ✓ Concluída ou ○ Não concluída */}
-                    {isCompleted ? (
-                      <div className="flex items-center gap-1.5 shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-500">
-                        <CheckCircle2 className="size-4" />
-                        <span className="hidden sm:inline">Concluída</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 shrink-0 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                        <Circle className="size-4" />
-                        <span className="hidden sm:inline">Não concluída</span>
-                      </div>
-                    )}
-
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                        Aula {String(index + 1).padStart(2, "0")}
-                      </p>
-                      <h3 className="font-medium text-foreground truncate text-base">
-                        {aula.title}
-                      </h3>
-                      {aula.description && (
-                        <p className="line-clamp-1 text-xs text-muted-foreground mt-0.5">
-                          {aula.description}
-                        </p>
+              return (
+                <Link
+                  key={aula.id}
+                  to="/curso/aula/$aulaId"
+                  params={{ aulaId: aula.id }}
+                  className="panel block p-4 md:p-5 transition-all hover:border-primary hover:bg-secondary/20"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 min-w-0">
+                      {isCompleted ? (
+                        <div className="flex items-center gap-1.5 shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-500">
+                          <CheckCircle2 className="size-4" />
+                          <span className="hidden sm:inline">Concluída</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 shrink-0 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                          <Circle className="size-4" />
+                          <span className="hidden sm:inline">Não concluída</span>
+                        </div>
                       )}
+
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                          Aula {String(index + 1).padStart(2, "0")} {aula.part ? `· ${aula.part}` : ""}
+                        </p>
+                        <h3 className="font-medium text-foreground truncate text-base">
+                          {aula.title}
+                        </h3>
+                        {aula.description && (
+                          <p className="line-clamp-1 text-xs text-muted-foreground mt-0.5">
+                            {aula.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      {aula.duration_seconds > 0 && (
+                        <span className="hidden md:flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="size-3.5" />
+                          {Math.round(aula.duration_seconds / 60)} min
+                        </span>
+                      )}
+                      <span className="inline-flex size-8 items-center justify-center rounded-lg bg-secondary text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                        <Play className="size-3.5 fill-current" />
+                      </span>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-3 shrink-0">
-                    {aula.duration_seconds > 0 && (
-                      <span className="hidden md:flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="size-3.5" />
-                        {Math.round(aula.duration_seconds / 60)} min
-                      </span>
-                    )}
-                    <span className="inline-flex size-8 items-center justify-center rounded-lg bg-secondary text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                      <Play className="size-3.5 fill-current" />
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-
-          {lessons.length === 0 && (
-            <div className="panel p-8 text-center text-muted-foreground text-sm">
-              Nenhuma aula cadastrada neste módulo ainda.
-            </div>
-          )}
-        </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </section>
     </div>
   );
