@@ -88,9 +88,8 @@ function AulaDetailPage() {
       const lesson = lessonRes.data;
       if (!lesson) return null;
 
-      const moduleObj = (Array.isArray(lesson.modules) ? lesson.modules[0] : lesson.modules) as any;
       let course = null;
-      if (moduleObj?.course_id) {
+      if (lesson.modules?.course_id) {
         const courseRes = await supabase
           .from("courses")
           .select("id, title, cover_url")
@@ -124,7 +123,7 @@ function AulaDetailPage() {
 
       return {
         lesson,
-        module: moduleObj,
+        module: lesson.modules,
         course,
         siblings: siblingsRes.data ?? [],
         progress: progressRes.data,

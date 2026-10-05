@@ -50,37 +50,35 @@ export type Database = {
         }
         Relationships: []
       }
-      student_courses: {
+      favorites: {
         Row: {
-          course_id: string
           created_at: string
           id: string
-          status: string
-          student_id: string
+          item_id: string
+          item_type: string
+          subtitle: string
+          title: string
+          user_id: string
         }
         Insert: {
-          course_id: string
           created_at?: string
           id?: string
-          status?: string
-          student_id: string
+          item_id: string
+          item_type: string
+          subtitle?: string
+          title?: string
+          user_id: string
         }
         Update: {
-          course_id?: string
           created_at?: string
           id?: string
-          status?: string
-          student_id?: string
+          item_id?: string
+          item_type?: string
+          subtitle?: string
+          title?: string
+          user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "student_courses_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "courses"
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
       }
       lesson_progress: {
         Row: {
@@ -112,6 +110,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "lesson_progress_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "lesson_progress_lesson_id_fkey"
             columns: ["lesson_id"]
             isOneToOne: false
@@ -136,8 +141,8 @@ export type Database = {
           summary: string | null
           title: string
           transcript: string
-          transcription_status: string | null
-          transcript_timestamps: Json | null
+          transcript_timestamps: Json
+          transcription_status: string
           video_url: string | null
         }
         Insert: {
@@ -155,8 +160,8 @@ export type Database = {
           summary?: string | null
           title: string
           transcript?: string
-          transcription_status?: string | null
-          transcript_timestamps?: Json | null
+          transcript_timestamps?: Json
+          transcription_status?: string
           video_url?: string | null
         }
         Update: {
@@ -174,8 +179,8 @@ export type Database = {
           summary?: string | null
           title?: string
           transcript?: string
-          transcription_status?: string | null
-          transcript_timestamps?: Json | null
+          transcript_timestamps?: Json
+          transcription_status?: string
           video_url?: string | null
         }
         Relationships: [
@@ -258,6 +263,44 @@ export type Database = {
           },
         ]
       }
+      notes: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          lesson_id: string
+          timestamp_seconds: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          lesson_id: string
+          timestamp_seconds?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          lesson_id?: string
+          timestamp_seconds?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notes_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -324,14 +367,15 @@ export type Database = {
           correct_index: number
           course_id: string | null
           created_at: string
-          difficulty: string | null
+          difficulty: string
           explanation: string
           id: string
           lesson_id: string | null
           module_id: string | null
           options: Json
           statement: string
-          subject: string | null
+          subject: string
+          subtopic: string
         }
         Insert: {
           ano?: number | null
@@ -339,14 +383,15 @@ export type Database = {
           correct_index?: number
           course_id?: string | null
           created_at?: string
-          difficulty?: string | null
+          difficulty?: string
           explanation?: string
           id?: string
           lesson_id?: string | null
           module_id?: string | null
           options?: Json
           statement: string
-          subject?: string | null
+          subject?: string
+          subtopic?: string
         }
         Update: {
           ano?: number | null
@@ -354,14 +399,15 @@ export type Database = {
           correct_index?: number
           course_id?: string | null
           created_at?: string
-          difficulty?: string | null
+          difficulty?: string
           explanation?: string
           id?: string
           lesson_id?: string | null
           module_id?: string | null
           options?: Json
           statement?: string
-          subject?: string | null
+          subject?: string
+          subtopic?: string
         }
         Relationships: [
           {
@@ -387,70 +433,34 @@ export type Database = {
           },
         ]
       }
-      favorites: {
+      student_courses: {
         Row: {
+          course_id: string
           created_at: string
           id: string
-          item_id: string
-          item_type: string
-          subtitle: string
-          title: string
-          user_id: string
+          status: string
+          student_id: string
         }
         Insert: {
+          course_id: string
           created_at?: string
           id?: string
-          item_id: string
-          item_type: string
-          subtitle?: string
-          title?: string
-          user_id: string
+          status?: string
+          student_id: string
         }
         Update: {
+          course_id?: string
           created_at?: string
           id?: string
-          item_id?: string
-          item_type?: string
-          subtitle?: string
-          title?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      notes: {
-        Row: {
-          content: string
-          created_at: string
-          id: string
-          lesson_id: string
-          timestamp_seconds: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          content: string
-          created_at?: string
-          id?: string
-          lesson_id: string
-          timestamp_seconds?: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          content?: string
-          created_at?: string
-          id?: string
-          lesson_id?: string
-          timestamp_seconds?: number
-          updated_at?: string
-          user_id?: string
+          status?: string
+          student_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "notes_lesson_id_fkey"
-            columns: ["lesson_id"]
+            foreignKeyName: "student_courses_course_id_fkey"
+            columns: ["course_id"]
             isOneToOne: false
-            referencedRelation: "lessons"
+            referencedRelation: "courses"
             referencedColumns: ["id"]
           },
         ]

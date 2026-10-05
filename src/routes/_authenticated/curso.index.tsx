@@ -9,8 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { LessonCard } from "@/components/LessonCard";
 
 export const Route = createFileRoute("/_authenticated/curso/")({
-  validateSearch: (search: Record<string, unknown>): { cursoId?: string } => ({
-    ...(typeof search.cursoId === "string" ? { cursoId: search.cursoId } : {}),
+  validateSearch: (search: Record<string, unknown>) => ({
+    cursoId: typeof search.cursoId === "string" ? search.cursoId : undefined,
   }),
   head: () => ({
     meta: [

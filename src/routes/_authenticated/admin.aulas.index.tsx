@@ -197,7 +197,7 @@ function AdminAulasIndexPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-accent">
-                    {(Array.isArray(aula.modules) ? aula.modules[0]?.title : aula.modules?.title) || "Módulo"}
+                    {aula.modules?.title || "Módulo"}
                   </span>
                   {aula.part && (
                     <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-bold text-blue-400">
