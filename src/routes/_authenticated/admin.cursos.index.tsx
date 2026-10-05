@@ -344,8 +344,8 @@ export function AdminCursosIndexPage() {
               className="panel flex flex-col justify-between overflow-hidden border transition-all hover:border-primary/50"
             >
               <div>
-                {/* Capa */}
-                <div className="relative aspect-video w-full bg-secondary overflow-hidden">
+                {/* Capa Vertical (estilo pôster) */}
+                <div className="relative aspect-[9/13] w-full bg-secondary overflow-hidden">
                   {course.cover_url ? (
                     <img
                       src={course.cover_url}
