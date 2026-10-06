@@ -3,14 +3,15 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthCard } from "@/components/AuthCard";
+import { isEmailAdmin } from "@/lib/auth";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
       { title: "Entrar — Informática com Jhon para Concursos" },
-      { name: "description", content: "Acesse sua área do aluno e continue sua preparação em Informática." },
+      { name: "description", content: "Acesse sua área de estudos ou o painel administrativo." },
       { property: "og:title", content: "Entrar — Informática com Jhon" },
-      { property: "og:description", content: "Acesse sua área do aluno e continue estudando." },
+      { property: "og:description", content: "Acesse a plataforma de Informática para Concursos." },
     ],
   }),
   component: LoginPage,
@@ -25,13 +26,43 @@ function LoginPage() {
   const entrar = async (e: React.FormEvent) => {
     e.preventDefault();
     setCarregando(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
+    const cleanEmail = email.trim().toLowerCase();
+
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: senha,
+    });
     setCarregando(false);
+
     if (error) {
       toast.error("Não foi possível entrar", { description: error.message });
       return;
     }
-    navigate({ to: "/dashboard" });
+
+    // Se o e-mail for do administrador principal
+    if (isEmailAdmin(cleanEmail)) {
+      toast.success("Bem-vindo, Professor Jonatas!", {
+        description: "Acessando o painel administrativo...",
+      });
+      navigate({ to: "/admin" });
+      return;
+    }
+
+    // Verificar se possui role de admin em user_roles
+    const { data: roleData } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", authData.user?.id || "")
+      .eq("role", "admin")
+      .maybeSingle();
+
+    if (roleData) {
+      toast.success("Bem-vindo ao painel administrativo!");
+      navigate({ to: "/admin" });
+    } else {
+      toast.success("Login realizado com sucesso!");
+      navigate({ to: "/dashboard" });
+    }
   };
 
   return (
@@ -44,6 +75,7 @@ function LoginPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            placeholder="seuemail@exemplo.com"
             className="w-full rounded-lg border border-input bg-secondary px-3 py-2.5 text-sm outline-none focus:border-primary"
           />
         </div>
@@ -54,12 +86,13 @@ function LoginPage() {
             required
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
+            placeholder="••••••••"
             className="w-full rounded-lg border border-input bg-secondary px-3 py-2.5 text-sm outline-none focus:border-primary"
           />
         </div>
         <button
           disabled={carregando}
-          className="w-full rounded-lg bg-primary py-2.5 font-semibold text-primary-foreground disabled:opacity-60"
+          className="w-full rounded-lg bg-primary py-2.5 font-semibold text-primary-foreground transition-opacity hover:opacity-95 disabled:opacity-60"
         >
           {carregando ? "Entrando..." : "Entrar"}
         </button>
@@ -75,3 +108,5 @@ function LoginPage() {
     </AuthCard>
   );
 }
+
+export default LoginPage;

@@ -13,6 +13,13 @@ type AuthValue = {
   refresh: () => Promise<void>;
 };
 
+const ADMIN_EMAILS = new Set(["professorjonatasg@gmail.com"]);
+
+export const isEmailAdmin = (email?: string | null): boolean => {
+  if (!email) return false;
+  return ADMIN_EMAILS.has(email.trim().toLowerCase());
+};
+
 const AuthContext = createContext<AuthValue>({
   session: null,
   user: null,
@@ -28,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const loadExtras = async (uid: string | undefined) => {
+  const loadExtras = async (uid: string | undefined, authUser?: User | null) => {
     if (!uid) {
       setProfile(null);
       setIsAdmin(false);
@@ -38,29 +45,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       supabase.from("profiles").select("id, full_name, email, whatsapp").eq("id", uid).maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", uid),
     ]);
-    const userEmail = (p?.email || session?.user?.email || "").toLowerCase();
-    const isOwnerAdmin = userEmail === "professorjonatasg@gmail.com";
+
+    const userEmail = (authUser?.email || p?.email || "").toLowerCase().trim();
+    const isOwnerAdmin = isEmailAdmin(userEmail);
+    const hasRoleAdmin = Boolean(roles?.some((r) => r.role === "admin"));
+    const adminStatus = isOwnerAdmin || hasRoleAdmin;
+
     setProfile((p as Profile) ?? null);
-    setIsAdmin(isOwnerAdmin || Boolean(roles?.some((r) => r.role === "admin")));
+    setIsAdmin(adminStatus);
+
+    // Se for o professor/administrador principal e ainda não tiver a role salva, cadastra em user_roles
+    if (isOwnerAdmin && !hasRoleAdmin) {
+      void supabase.from("user_roles").insert({ user_id: uid, role: "admin" });
+    }
   };
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
-      if (s?.user?.email?.toLowerCase() === "professorjonatasg@gmail.com") {
+      if (isEmailAdmin(s?.user?.email)) {
         setIsAdmin(true);
       }
       setTimeout(() => {
-        void loadExtras(s?.user?.id);
+        void loadExtras(s?.user?.id, s?.user);
       }, 0);
     });
 
     void supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
-      if (data.session?.user?.email?.toLowerCase() === "professorjonatasg@gmail.com") {
+      if (isEmailAdmin(data.session?.user?.email)) {
         setIsAdmin(true);
       }
-      await loadExtras(data.session?.user?.id);
+      await loadExtras(data.session?.user?.id, data.session?.user);
       setLoading(false);
     });
 
@@ -73,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     isAdmin,
     loading,
-    refresh: async () => loadExtras(session?.user?.id),
+    refresh: async () => loadExtras(session?.user?.id, session?.user),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

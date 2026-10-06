@@ -83,6 +83,18 @@ function AdminIndexPage() {
     );
   }
 
+  if (!isAdmin) {
+    return (
+      <div className="panel p-8 text-center space-y-4 max-w-md mx-auto my-12">
+        <h2 className="text-xl font-bold font-display">Acesso Restrito</h2>
+        <p className="text-sm text-muted-foreground">Esta área é restrita para o professor.</p>
+        <Link to="/meus-cursos" className="inline-block rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground">
+          Voltar aos Meus Cursos
+        </Link>
+      </div>
+    );
+  }
+
   const courses = data?.courses ?? [];
   const allModules = data?.modules ?? [];
   const allLessons = data?.lessons ?? [];

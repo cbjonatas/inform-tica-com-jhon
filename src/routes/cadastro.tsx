@@ -47,6 +47,11 @@ function CadastroPage() {
       navigate({ to: "/login" });
       return;
     }
+    if (email.trim().toLowerCase() === "professorjonatasg@gmail.com") {
+      toast.success("Conta de administrador criada com sucesso!");
+      navigate({ to: "/admin" });
+      return;
+    }
     navigate({ to: "/dashboard" });
   };
 
