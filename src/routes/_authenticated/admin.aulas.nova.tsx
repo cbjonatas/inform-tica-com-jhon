@@ -298,28 +298,111 @@ function NovaAulaPage() {
       // 6. Inserir a Aula na Tabela lessons com capa vertical, assunto e parte
       const durationSeconds = durationMinutes > 0 ? durationMinutes * 60 : 1800;
 
-      const { data: newLesson, error: lessonError } = await supabase
-        .from("lessons")
-        .insert({
-          module_id: moduleId,
-          title: title.trim(),
-          description: description.trim(),
-          subject: subject.trim() || title.trim(),
-          part: part.trim(),
-          cover_url: finalCoverUrl,
-          duration_seconds: durationSeconds,
-          transcript: transcriptionData.transcript,
-          transcript_timestamps: transcriptionData.timestamps,
-          video_url: finalVideoUrl || null,
-          pdf_url: finalPdfUrl || null,
-          position: nextPosition,
-          published: true,
-          transcription_status: "completed",
-        })
-        .select("id")
-        .single();
+      const formattedTitleWithPart =
+        part.trim() && !title.includes(part.trim())
+          ? `${title.trim()} — ${part.trim()}`
+          : title.trim();
 
-      if (lessonError) throw lessonError;
+      let newLesson: any = null;
+
+      // Tentativa 1: Inserir com todos os campos (cover_url, subject, part)
+      try {
+        const fullRes = await supabase
+          .from("lessons")
+          .insert({
+            module_id: moduleId,
+            title: title.trim(),
+            description: description.trim(),
+            subject: subject.trim() || title.trim(),
+            part: part.trim(),
+            cover_url: finalCoverUrl,
+            duration_seconds: durationSeconds,
+            transcript: transcriptionData.transcript,
+            transcript_timestamps: transcriptionData.timestamps,
+            video_url: finalVideoUrl || null,
+            pdf_url: finalPdfUrl || null,
+            position: nextPosition,
+            published: true,
+            transcription_status: "completed",
+          } as any)
+          .select("id")
+          .single();
+
+        if (fullRes.error) {
+          throw fullRes.error;
+        }
+        newLesson = fullRes.data;
+      } catch (insertErr: any) {
+        console.warn("Aviso ao inserir aula com schema completo:", insertErr?.message || insertErr);
+
+        const isSchemaCacheError =
+          insertErr?.message?.includes("cover_url") ||
+          insertErr?.message?.includes("subject") ||
+          insertErr?.message?.includes("part") ||
+          insertErr?.message?.includes("schema cache") ||
+          insertErr?.code === "42703" ||
+          insertErr?.code === "PGRST204";
+
+        if (isSchemaCacheError) {
+          // Tentativa 2: Fallback seguro sem as colunas que podem estar ausentes no banco
+          const safeRes = await supabase
+            .from("lessons")
+            .insert({
+              module_id: moduleId,
+              title: formattedTitleWithPart,
+              description: description.trim(),
+              duration_seconds: durationSeconds,
+              transcript: transcriptionData.transcript,
+              transcript_timestamps: transcriptionData.timestamps,
+              video_url: finalVideoUrl || null,
+              pdf_url: finalPdfUrl || null,
+              position: nextPosition,
+              published: true,
+              transcription_status: "completed",
+            } as any)
+            .select("id")
+            .single();
+
+          if (safeRes.error) {
+            // Tentativa 3: Inserção compatível com colunas originais mínimas
+            const minimalRes = await supabase
+              .from("lessons")
+              .insert({
+                module_id: moduleId,
+                title: formattedTitleWithPart,
+                description: description.trim(),
+                duration_seconds: durationSeconds,
+                transcript: transcriptionData.transcript,
+                video_url: finalVideoUrl || null,
+                pdf_url: finalPdfUrl || null,
+                position: nextPosition,
+                published: true,
+              } as any)
+              .select("id")
+              .single();
+
+            if (minimalRes.error) throw minimalRes.error;
+            newLesson = minimalRes.data;
+          } else {
+            newLesson = safeRes.data;
+          }
+        } else {
+          throw insertErr;
+        }
+      }
+
+      // Garantir vinculação do PDF na tabela materials para fácil acesso do aluno
+      if (finalPdfUrl && newLesson?.id) {
+        try {
+          await supabase.from("materials").insert({
+            lesson_id: newLesson.id,
+            title: `Material de Apoio (PDF) — ${title.trim()}`,
+            file_url: finalPdfUrl,
+          });
+        } catch (mErr) {
+          console.warn("Aviso ao registrar material de apoio PDF:", mErr);
+        }
+      }
 
       // 7. Resumo com IA
       if (autoProcessWithAi && newLesson?.id) {

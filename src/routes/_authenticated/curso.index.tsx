@@ -87,7 +87,7 @@ export function CursoPage() {
           .order("position"),
         supabase
           .from("lessons")
-          .select("id, module_id, title, position, duration_seconds, cover_url, subject, part")
+          .select("*")
           .order("position"),
         supabase
           .from("lesson_progress")

@@ -100,7 +100,7 @@ function AulaDetailPage() {
 
       const siblingsRes = await supabase
         .from("lessons")
-        .select("id, title, position, duration_seconds, cover_url, subject, part")
+        .select("*")
         .eq("module_id", lesson.module_id)
         .order("position");
 

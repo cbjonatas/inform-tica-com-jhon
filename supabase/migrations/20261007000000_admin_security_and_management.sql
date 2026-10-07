@@ -25,6 +25,12 @@ CREATE TABLE IF NOT EXISTS public.student_courses (
   UNIQUE (student_id, course_id)
 );
 
+-- Garantir colunas de capa vertical, assunto e parte na tabela lessons
+ALTER TABLE public.lessons 
+  ADD COLUMN IF NOT EXISTS cover_url text DEFAULT '',
+  ADD COLUMN IF NOT EXISTS subject text DEFAULT '',
+  ADD COLUMN IF NOT EXISTS part text DEFAULT '';
+
 -- 2. Função has_role com verificação segura do professorjonatasg@gmail.com e de user_roles
 CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role public.app_role)
 RETURNS boolean
