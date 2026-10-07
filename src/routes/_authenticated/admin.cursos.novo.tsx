@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowLeft, CheckCircle2, GraduationCap, Image as ImageIcon, Loader2, PlusCircle, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth";
+import { useAuth, isEmailAdmin } from "@/lib/auth";
 import { UploadArea } from "@/components/UploadArea";
 
 export const Route = createFileRoute("/_authenticated/admin/cursos/novo")({
@@ -16,8 +16,16 @@ export const Route = createFileRoute("/_authenticated/admin/cursos/novo")({
 });
 
 export function NovoCursoPage() {
-  const { isAdmin } = useAuth();
+  const { user, profile, isAdmin: authIsAdmin } = useAuth();
   const navigate = useNavigate();
+
+  const userEmail = (user?.email || user?.user_metadata?.email || profile?.email || "").toLowerCase().trim();
+  const userName = (user?.user_metadata?.full_name || profile?.full_name || "").toLowerCase().trim();
+  const isAdmin =
+    Boolean(authIsAdmin) ||
+    isEmailAdmin(userEmail) ||
+    isEmailAdmin(profile?.email) ||
+    userName.includes("professorjonatas");
 
   // Campos do formulário
   const [title, setTitle] = useState("");

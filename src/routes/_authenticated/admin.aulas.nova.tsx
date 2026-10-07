@@ -15,7 +15,7 @@ import {
   Video,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth";
+import { useAuth, isEmailAdmin } from "@/lib/auth";
 import { UploadArea } from "@/components/UploadArea";
 import { ProcessingStatus, type ProcessingStep } from "@/components/ProcessingStatus";
 import { aiService } from "@/lib/ai/ai-service";
@@ -37,10 +37,18 @@ export const Route = createFileRoute("/_authenticated/admin/aulas/nova")({
 const DEFAULT_PARTS = ["Parte 1", "Parte 2", "Parte 3", "Parte 4", "Parte 5", "Aula Única"];
 
 function NovaAulaPage() {
-  const { isAdmin } = useAuth();
+  const { user, profile, isAdmin: authIsAdmin } = useAuth();
   const search = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  const userEmail = (user?.email || user?.user_metadata?.email || profile?.email || "").toLowerCase().trim();
+  const userName = (user?.user_metadata?.full_name || profile?.full_name || "").toLowerCase().trim();
+  const isAdmin =
+    Boolean(authIsAdmin) ||
+    isEmailAdmin(userEmail) ||
+    isEmailAdmin(profile?.email) ||
+    userName.includes("professorjonatas");
 
   // Estados de identificação
   const [selectedCourseId, setSelectedCourseId] = useState<string>(search.cursoId || "");

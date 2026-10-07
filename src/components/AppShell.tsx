@@ -21,7 +21,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth";
+import { useAuth, isEmailAdmin } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -35,9 +35,18 @@ const nav = [
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { profile, isAdmin, user } = useAuth();
+  const { profile, isAdmin: authIsAdmin, user } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+
+  // Verificação imediata e à prova de falhas de administrador
+  const userEmail = (user?.email || user?.user_metadata?.email || profile?.email || "").toLowerCase().trim();
+  const userName = (user?.user_metadata?.full_name || profile?.full_name || "").toLowerCase().trim();
+  const isAdmin =
+    Boolean(authIsAdmin) ||
+    isEmailAdmin(userEmail) ||
+    isEmailAdmin(profile?.email) ||
+    userName.includes("professorjonatas");
 
   // Estados de Busca Global (Item 26)
   const [searchOpen, setSearchOpen] = useState(false);

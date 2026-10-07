@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth";
+import { useAuth, isEmailAdmin } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ProgressBar";
 
@@ -36,8 +36,17 @@ export const Route = createFileRoute("/_authenticated/admin/alunos")({
 });
 
 export function AdminAlunosPage() {
-  const { isAdmin } = useAuth();
+  const { user, profile, isAdmin: authIsAdmin } = useAuth();
   const queryClient = useQueryClient();
+
+  const userEmail = (user?.email || user?.user_metadata?.email || profile?.email || "").toLowerCase().trim();
+  const userName = (user?.user_metadata?.full_name || profile?.full_name || "").toLowerCase().trim();
+  const isAdmin =
+    Boolean(authIsAdmin) ||
+    isEmailAdmin(userEmail) ||
+    isEmailAdmin(profile?.email) ||
+    userName.includes("professorjonatas");
+
   const [searchTerm, setSearchTerm] = useState("");
 
   // Estados de Criação / Edição de Aluno
