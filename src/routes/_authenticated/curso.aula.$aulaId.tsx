@@ -214,11 +214,16 @@ function AulaDetailPage() {
       if (completed !== undefined) payload.completed = completed;
       await supabase.from("lesson_progress").upsert(payload, { onConflict: "user_id,lesson_id" });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["aula_detail", aulaId] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-multicourse"] });
-      queryClient.invalidateQueries({ queryKey: ["meus-cursos"] });
-      queryClient.invalidateQueries({ queryKey: ["curso-trilha"] });
+    onSuccess: (_data, variables) => {
+      // Somente invalidar queries globais e de detalhe quando a aula for explicitamente concluída/desmarcada
+      // O salvamento periódico de segundos NÃO deve invalidar aula_detail em tempo real
+      // para evitar recarregar o estado e causar saltos ou repetições no player!
+      if (variables?.completed !== undefined) {
+        queryClient.invalidateQueries({ queryKey: ["aula_detail", aulaId] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-multicourse"] });
+        queryClient.invalidateQueries({ queryKey: ["meus-cursos"] });
+        queryClient.invalidateQueries({ queryKey: ["curso-trilha"] });
+      }
     },
   });
 
