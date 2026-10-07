@@ -72,46 +72,77 @@ function AulaDetailPage() {
   // Respostas de questões
   const [userAnswers, setUserAnswers] = useState<Record<string, number>>({});
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isPending } = useQuery({
     queryKey: ["aula_detail", aulaId, user?.id],
-    enabled: Boolean(aulaId && user?.id),
+    enabled: Boolean(aulaId),
     queryFn: async () => {
-      const [lessonRes, progressRes, materialsRes, notesRes, favRes, summaryRes] = await Promise.all([
-        supabase.from("lessons").select("*, modules(*)").eq("id", aulaId).maybeSingle(),
-        supabase.from("lesson_progress").select("*").eq("lesson_id", aulaId).maybeSingle(),
-        supabase.from("materials").select("*").eq("lesson_id", aulaId),
-        supabase.from("notes").select("*").eq("lesson_id", aulaId).order("created_at", { ascending: false }),
-        supabase.from("favorites").select("id").eq("item_type", "lesson").eq("item_id", aulaId).maybeSingle(),
-        supabase.from("summaries").select("*").eq("lesson_id", aulaId).maybeSingle(),
-      ]);
-
-      const lesson = lessonRes.data;
-      if (!lesson) return null;
-
-      let course = null;
-      if (lesson.modules?.course_id) {
-        const courseRes = await supabase
-          .from("courses")
-          .select("id, title, cover_url")
-          .eq("id", moduleObj.course_id)
-          .maybeSingle();
-        course = courseRes.data;
-      }
-
-      const siblingsRes = await supabase
+      // 1. Buscar a aula diretamente
+      const { data: lesson, error: lessonErr } = await supabase
         .from("lessons")
         .select("*")
-        .eq("module_id", lesson.module_id)
-        .order("position");
+        .eq("id", aulaId)
+        .maybeSingle();
 
-      const questionsRes = await supabase
-        .from("questions")
-        .select("*")
-        .or(`lesson_id.eq.${aulaId},module_id.eq.${lesson.module_id}`);
+      if (lessonErr) {
+        console.error("Erro ao carregar detalhes da aula:", lessonErr);
+      }
 
-      setIsFavorited(Boolean(favRes.data));
+      if (!lesson) return null;
 
-      if (summaryRes.data) {
+      // 2. Buscar módulo e curso vinculado
+      let moduleData: any = null;
+      let courseData: any = null;
+
+      if (lesson.module_id) {
+        const { data: mod } = await supabase
+          .from("modules")
+          .select("*")
+          .eq("id", lesson.module_id)
+          .maybeSingle();
+        moduleData = mod;
+
+        if (mod?.course_id) {
+          const { data: crs } = await supabase
+            .from("courses")
+            .select("id, title, cover_url")
+            .eq("id", mod.course_id)
+            .maybeSingle();
+          courseData = crs;
+        }
+      }
+
+      // 3. Buscar aulas irmãs do mesmo módulo para navegação e capas
+      let siblings: any[] = [];
+      if (lesson.module_id) {
+        const { data: sibs } = await supabase
+          .from("lessons")
+          .select("*")
+          .eq("module_id", lesson.module_id)
+          .order("position");
+        siblings = sibs ?? [];
+      }
+
+      // 4. Buscar materiais, progresso, favoritos, resumo e notas
+      const [materialsRes, progressRes, favRes, summaryRes, notesRes, questionsRes] = await Promise.all([
+        supabase.from("materials").select("*").eq("lesson_id", aulaId),
+        user?.id
+          ? supabase.from("lesson_progress").select("*").eq("lesson_id", aulaId).eq("user_id", user.id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        user?.id
+          ? supabase.from("favorites").select("id").eq("item_type", "lesson").eq("item_id", aulaId).eq("user_id", user.id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        supabase.from("summaries").select("*").eq("lesson_id", aulaId).maybeSingle(),
+        user?.id
+          ? supabase.from("notes").select("*").eq("lesson_id", aulaId).eq("user_id", user.id).order("created_at", { ascending: false })
+          : Promise.resolve({ data: [] }),
+        lesson.module_id
+          ? supabase.from("questions").select("*").or(`lesson_id.eq.${aulaId},module_id.eq.${lesson.module_id}`)
+          : supabase.from("questions").select("*").eq("lesson_id", aulaId),
+      ]);
+
+      setIsFavorited(Boolean(favRes?.data));
+
+      if (summaryRes?.data) {
         setGeneratedSummary({
           resumo: summaryRes.data.summary_text,
           conceitos: summaryRes.data.key_concepts || [],
@@ -121,15 +152,30 @@ function AulaDetailPage() {
         });
       }
 
+      // Unificar materiais: se a aula possui pdf_url, garantir na listagem de materiais
+      let materials = materialsRes?.data ?? [];
+      if (lesson.pdf_url && !materials.some((m: any) => m.file_url === lesson.pdf_url)) {
+        materials = [
+          {
+            id: `pdf-${lesson.id}`,
+            lesson_id: lesson.id,
+            title: `Apostila / PDF da Aula`,
+            file_url: lesson.pdf_url,
+            created_at: lesson.created_at,
+          },
+          ...materials,
+        ];
+      }
+
       return {
         lesson,
-        module: lesson.modules,
-        course,
-        siblings: siblingsRes.data ?? [],
-        progress: progressRes.data,
-        materials: materialsRes.data ?? [],
-        notes: notesRes.data ?? [],
-        questions: questionsRes.data ?? [],
+        module: moduleData,
+        course: courseData,
+        siblings,
+        progress: progressRes?.data,
+        materials,
+        notes: notesRes?.data ?? [],
+        questions: questionsRes?.data ?? [],
       };
     },
   });
@@ -259,7 +305,7 @@ function AulaDetailPage() {
   const prevLesson = currentIndex > 0 ? siblings[currentIndex - 1] : null;
   const nextLesson = currentIndex < siblings.length - 1 ? siblings[currentIndex + 1] : null;
 
-  if (isLoading) {
+  if (isLoading || (isPending && Boolean(aulaId))) {
     return (
       <div className="flex h-64 items-center justify-center">
         <p className="text-muted-foreground animate-pulse">Carregando aula...</p>
