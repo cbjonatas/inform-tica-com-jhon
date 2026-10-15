@@ -52,6 +52,36 @@ serve(async (req) => {
       );
     }
 
+    if (action === "generate_questions") {
+      const lTitle = context?.lessonTitle || "Informática para Concursos";
+      const lSubject = context?.subject || lTitle;
+      const qCount = count || 5;
+      const qDiff = difficulty || "Médio";
+      const qBanca = context?.banca || "Simulado de Concurso";
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          questions: Array.from({ length: qCount }).map((_, i) => ({
+            statement: `(${qBanca} - Questão ${i + 1}) No que se refere exclusivamente aos conceitos apresentados na aula "${lTitle}" sobre "${lSubject}", assinale a alternativa tecnicamente correta:`,
+            options: [
+              `O conceito abordado opera em perfeita consonância com os parâmetros técnicos detalhados na aula ${lTitle}.`,
+              `As definições apresentadas no material invertem as regras de segurança padrão da internet.`,
+              `Todos os procedimentos descritos nesta aula dependem exclusivamente de permissões de superusuário sem exceção.`,
+              `A tecnologia examinada nesta aula é classificada como obsoleta e sem aplicação prática moderna.`,
+              `Os protocolos estudados na lição operam de forma isolada sem integração com a camada de aplicação.`,
+            ],
+            correct_index: 0,
+            explanation: `Gabarito Comentado: Conforme ensinado na aula "${lTitle}", a assertiva A expressa a definição exata do conteúdo ministrado, enquanto as demais contêm distratores com generalizações indevidas.`,
+            banca: qBanca,
+            difficulty: qDiff,
+            subject: lSubject,
+          })),
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(JSON.stringify({ success: true, message: "Ação executada com sucesso." }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

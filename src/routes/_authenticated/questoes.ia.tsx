@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -11,14 +11,21 @@ import {
   PlusCircle,
   RotateCcw,
   Sparkles,
+  Trash2,
   XCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { aiService } from "@/lib/ai/ai-service";
 
 export const Route = createFileRoute("/_authenticated/questoes/ia")({
+  validateSearch: (search: Record<string, unknown>): { cursoId?: string; moduloId?: string; aulaId?: string } => ({
+    ...(typeof search.cursoId === "string" ? { cursoId: search.cursoId } : {}),
+    ...(typeof search.moduloId === "string" ? { moduloId: search.moduloId } : {}),
+    ...(typeof search.aulaId === "string" ? { aulaId: search.aulaId } : {}),
+  }),
   head: () => ({
     meta: [
       { title: "Gerador de Questões IA por Curso — Informática com Jhon" },
@@ -46,11 +53,13 @@ function GeradorQuestoesIaPage() {
   const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
 
-  // Filtros em Cascata (Item 6 da especificação):
+  const search = Route.useSearch();
+
+  // Filtros em Cascata:
   // CURSO -> MÓDULO -> AULA -> ASSUNTO -> QUANTIDADE -> DIFICULDADE
-  const [selectedCourse, setSelectedCourse] = useState<string>("");
-  const [selectedModule, setSelectedModule] = useState<string>("");
-  const [selectedLesson, setSelectedLesson] = useState<string>("");
+  const [selectedCourse, setSelectedCourse] = useState<string>(search.cursoId || "");
+  const [selectedModule, setSelectedModule] = useState<string>(search.moduloId || "");
+  const [selectedLesson, setSelectedLesson] = useState<string>(search.aulaId || "");
   const [subject, setSubject] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(5);
   const [difficulty, setDifficulty] = useState<"Fácil" | "Médio" | "Difícil">("Médio");
@@ -103,120 +112,84 @@ function GeradorQuestoesIaPage() {
     },
   });
 
-  // Geração de questões com IA contextualizada pelo curso escolhido
-  const handleGenerate = () => {
+  // Geração de questões com IA contextualizada pelo curso e aula escolhidos
+  const handleGenerate = async () => {
     if (!selectedCourse) return;
     setIsGenerating(true);
     setUserAnswers({});
     setSavedSuccess(false);
 
-    setTimeout(() => {
+    try {
       const activeCourseTitle = courses.find((c) => c.id === selectedCourse)?.title || "Curso Selecionado";
       const activeModuleTitle = modules.find((m) => m.id === selectedModule)?.title || "Informática Geral";
-      const activeLessonTitle = lessons.find((l) => l.id === selectedLesson)?.title || subject || "Conceitos Fundamentais";
+      const activeLesson = lessons.find((l) => l.id === selectedLesson);
 
-      const bankQuestions: GeneratedQuestion[] = [
-        {
-          id: `ia-${Date.now()}-1`,
-          course_id: selectedCourse,
-          module_id: selectedModule || undefined,
-          lesson_id: selectedLesson || undefined,
-          subject: subject || activeModuleTitle,
-          difficulty,
-          banca: `Simulado IA — ${activeCourseTitle}`,
-          statement: `No contexto de "${activeLessonTitle}" para o edital de ${activeCourseTitle}, qual das seguintes alternativas expressa um conceito técnico rigorosamente correto?`,
-          options: [
-            "A memória RAM preserva os dados de programas abertos mesmo após a máquina ser desenergizada.",
-            "O protocolo HTTPS utiliza criptografia assimétrica na fase de negociação inicial para troca segura de uma chave de sessão simétrica.",
-            "Em uma rede com topologia em anel, a falha em um nó terminal nunca interrompe o tráfego dos demais dispositivos.",
-            "O comando 'ls -la' no Linux exclui permanentemente todos os arquivos ocultos do diretório atual.",
-            "Uma assinatura digital garante sigilo absoluto do conteúdo sem verificar a integridade da mensagem.",
-          ],
-          correct_index: 1,
-          explanation: "O protocolo HTTPS combina criptografia assimétrica (para estabelecer a conexão segura e trocar a chave de sessão) e criptografia simétrica (para o tráfego dos dados). As outras opções apresentam equívocos conceituais clássicos de concursos.",
-        },
-        {
-          id: `ia-${Date.now()}-2`,
-          course_id: selectedCourse,
-          module_id: selectedModule || undefined,
-          lesson_id: selectedLesson || undefined,
-          subject: subject || activeModuleTitle,
-          difficulty,
-          banca: `Simulado IA — ${activeCourseTitle}`,
-          statement: `Acerca de mecanismos de proteção contra ataques e malwares no escopo de ${activeCourseTitle}:`,
-          options: [
-            "O Ransomware é um software malicioso que restringe o acesso ao sistema infectado através de criptografia e exige resgate.",
-            "Um Spyware é um tipo de hardware físico acoplado à placa-mãe para acelerar conexões de fibra óptica.",
-            "A técnica de Phishing consiste exclusivamente em derrubar servidores web por sobrecarga de pacotes SYN.",
-            "O Cavalo de Troia (Trojan) replica-se de forma autônoma pela rede infectando switches sem qualquer ação humana.",
-            "O Firewall é o programa responsável por desfragmentar o disco rígido e liberar espaço na lixeira.",
-          ],
-          correct_index: 0,
-          explanation: "Ransomware é exatamente o malware que sequestra dados ou sistemas mediante criptografia forte, exigindo compensação financeira (resgate). Phishing busca induzir a vítima a fornecer dados sensíveis, enquanto Trojan depende de execução pelo usuário disfarçado de programa legítimo.",
-        },
-        {
-          id: `ia-${Date.now()}-3`,
-          course_id: selectedCourse,
-          module_id: selectedModule || undefined,
-          lesson_id: selectedLesson || undefined,
-          subject: subject || activeModuleTitle,
-          difficulty,
-          banca: `Simulado IA — ${activeCourseTitle}`,
-          statement: `Em relação ao modelo OSI e à arquitetura TCP/IP abordados nas aulas de "${activeCourseTitle}":`,
-          options: [
-            "O protocolo IP opera na camada de Aplicação, sendo responsável pela formatação da interface com o usuário.",
-            "O protocolo UDP é orientado à conexão e garante a entrega ordenada de pacotes através do mecanismo de three-way handshake.",
-            "O protocolo TCP opera na camada de Transporte, oferecendo entrega confiável, controle de fluxo e detecção de erros.",
-            "O endereço IPv4 é composto por 128 bits organizados em oito grupos hexadecimais.",
-            "O switch opera tipicamente na camada de Sessão do modelo de referência OSI.",
-          ],
-          correct_index: 2,
-          explanation: "O protocolo TCP opera na camada de transporte garantindo confiabilidade e ordenação dos pacotes. O UDP não é orientado a conexão. O IPv4 tem 32 bits (128 bits é o IPv6). Switches típicos operam na camada 2 (Enlace de dados).",
-        },
-        {
-          id: `ia-${Date.now()}-4`,
-          course_id: selectedCourse,
-          module_id: selectedModule || undefined,
-          lesson_id: selectedLesson || undefined,
-          subject: subject || activeModuleTitle,
-          difficulty,
-          banca: `Simulado IA — ${activeCourseTitle}`,
-          statement: `Considere os recursos do sistema operacional Windows e suas ferramentas utilitárias:`,
-          options: [
-            "O atalho 'Windows + L' bloqueia instantaneamente a estação de trabalho, exigindo autenticação para retorno.",
-            "O Gerenciador de Tarefas pode ser acessado apenas reiniciando o computador em modo de segurança.",
-            "O BitLocker é um utilitário destinado unicamente a compactar fotos e vídeos sem perda de qualidade.",
-            "O prompt de comando (CMD) foi completamente removido do Windows 10 e Windows 11.",
-            "O Explorador de Arquivos não permite recortar ou renomear arquivos que estejam na pasta Documentos.",
-          ],
-          correct_index: 0,
-          explanation: "O atalho 'Windows + L' (Lock) é o comando nativo mais cobrado em concursos públicos para bloquear a estação de trabalho imediatamente.",
-        },
-        {
-          id: `ia-${Date.now()}-5`,
-          course_id: selectedCourse,
-          module_id: selectedModule || undefined,
-          lesson_id: selectedLesson || undefined,
-          subject: subject || activeModuleTitle,
-          difficulty,
-          banca: `Simulado IA — ${activeCourseTitle}`,
-          statement: `No que tange às políticas de backup e segurança em corporações públicas:`,
-          options: [
-            "O backup diferencial copia todos os arquivos alterados desde o último backup completo e desmarca os atributos de arquivo.",
-            "A regra '3-2-1' de backup recomenda 3 cópias dos dados, em 2 mídias diferentes, com pelo menos 1 cópia fora do local (off-site).",
-            "O backup completo apenas pode ser executado uma única vez durante toda a vida útil do servidor de dados.",
-            "A recuperação de um backup incremental exige apenas a última fita ou disco onde foi gravado.",
-            "Nuvem pública (Public Cloud) não permite nenhum tipo de criptografia em repouso por determinação de órgãos internacionais.",
-          ],
-          correct_index: 1,
-          explanation: "A estratégia padrão ouro internacional de segurança em backup é a regra 3-2-1 (3 cópias, 2 mídias distintas, 1 cópia externa/nuvem). No backup diferencial, o bit de arquivo NÃO é desmarcado.",
-        },
-      ];
+      let contextTranscript = "";
+      let contextDescription = "";
+      let contextMaterials = "";
+      let contextTitle = activeLesson?.title || "";
+      let contextPart: number | undefined;
 
-      const sliceCount = Math.min(quantity, bankQuestions.length);
-      setGeneratedQuestions(bankQuestions.slice(0, sliceCount));
+      if (selectedLesson) {
+        const { data: lessonData } = await supabase
+          .from("lessons")
+          .select("id, title, description, transcript, part, materials")
+          .eq("id", selectedLesson)
+          .maybeSingle();
+
+        if (lessonData) {
+          contextTitle = lessonData.title || contextTitle;
+          contextDescription = lessonData.description || "";
+          contextTranscript = lessonData.transcript || "";
+          contextPart = lessonData.part || undefined;
+          if (Array.isArray(lessonData.materials)) {
+            contextMaterials = lessonData.materials
+              .map((m: any) => m.name || m.title || "")
+              .filter(Boolean)
+              .join(", ");
+          }
+        }
+      }
+
+      const activeLessonTitle = contextTitle || subject || "Conceitos Fundamentais";
+      const chosenDifficulty = difficulty.toLowerCase() === "fácil" ? "facil" : difficulty.toLowerCase() === "difícil" ? "dificil" : "medio";
+
+      const generated = await aiService.generateQuestions(
+        quantity,
+        chosenDifficulty,
+        {
+          courseTitle: activeCourseTitle,
+          moduleTitle: activeModuleTitle,
+          lessonTitle: activeLessonTitle,
+          subject: subject || activeModuleTitle || activeLessonTitle,
+          transcript: contextTranscript,
+          description: contextDescription,
+          materialsText: contextMaterials,
+          part: contextPart,
+          banca: banca.trim() ? banca : `Simulado IA — ${activeCourseTitle}`,
+        }
+      );
+
+      const formatted: GeneratedQuestion[] = generated.map((q, idx) => ({
+        id: `ia-${Date.now()}-${idx}`,
+        course_id: selectedCourse,
+        module_id: selectedModule || undefined,
+        lesson_id: selectedLesson || undefined,
+        subject: subject || activeModuleTitle,
+        difficulty,
+        banca: banca.trim() ? banca : `Simulado IA — ${activeCourseTitle}`,
+        statement: q.statement,
+        options: q.options,
+        correct_index: q.correct_index,
+        explanation: q.explanation,
+      }));
+
+      setGeneratedQuestions(formatted);
+    } catch (err) {
+      console.error("Erro ao gerar questões com IA:", err);
+    } finally {
       setIsGenerating(false);
-    }, 1200);
+    }
   };
 
   const handleAnswer = async (qId: string, optIndex: number, correctIndex: number) => {
@@ -234,6 +207,19 @@ function GeradorQuestoesIaPage() {
         queryClient.invalidateQueries({ queryKey: ["dashboard-multicourse"] });
       }
     }
+  };
+
+  // Excluir ou remover questão
+  const handleRemoveQuestion = async (qId: string) => {
+    if (!window.confirm("Deseja realmente excluir esta questão da plataforma?")) return;
+
+    const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(qId);
+    if (isValidUuid) {
+      await supabase.from("questions").delete().eq("id", qId);
+      queryClient.invalidateQueries({ queryKey: ["questoes_full_page"] });
+    }
+
+    setGeneratedQuestions((prev) => prev.filter((q) => q.id !== qId));
   };
 
   // Salvar no Banco de Questões do Curso (Item 4 da especificação)
@@ -255,7 +241,16 @@ function GeradorQuestoesIaPage() {
       ano: new Date().getFullYear(),
     }));
 
-    await supabase.from("questions").insert(questionsToInsert);
+    const { data: insertedData } = await supabase.from("questions").insert(questionsToInsert).select("id");
+    if (insertedData && insertedData.length > 0) {
+      setGeneratedQuestions((prev) =>
+        prev.map((q, i) => ({
+          ...q,
+          id: insertedData[i]?.id || q.id,
+        }))
+      );
+    }
+
     setIsSavingToBank(false);
     setSavedSuccess(true);
     queryClient.invalidateQueries({ queryKey: ["questoes_full_page"] });
@@ -508,6 +503,14 @@ function GeradorQuestoesIaPage() {
                       >
                         {q.difficulty}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveQuestion(q.id)}
+                        title="Excluir questão da plataforma"
+                        className="rounded-lg p-1 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors ml-1"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
                     </div>
                   </div>
 

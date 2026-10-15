@@ -2,8 +2,13 @@ export interface LessonContext {
   courseTitle?: string;
   moduleTitle?: string;
   lessonTitle: string;
+  subject?: string;
+  part?: string;
+  description?: string;
   transcript?: string;
   pdfText?: string;
+  materialsText?: string;
+  banca?: string;
 }
 
 export interface GeneratedSummaryResult {

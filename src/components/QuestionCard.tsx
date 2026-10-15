@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, RotateCcw, Star, XCircle } from "lucide-react";
+import { CheckCircle2, RotateCcw, Star, Trash2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface QuestionData {
@@ -22,6 +22,7 @@ interface QuestionCardProps {
   onRetry?: () => void;
   isFavorited?: boolean;
   onToggleFavorite?: () => void;
+  onDelete?: (questionId: string) => void;
   className?: string;
 }
 
@@ -33,6 +34,7 @@ export function QuestionCard({
   onRetry,
   isFavorited = false,
   onToggleFavorite,
+  onDelete,
   className,
 }: QuestionCardProps) {
   const [localSelection, setLocalSelection] = useState<number | undefined>(userSelectedIndex);
@@ -91,6 +93,21 @@ export function QuestionCard({
               title={isFavorited ? "Remover dos favoritos" : "Salvar nos favoritos"}
             >
               <Star className={cn("size-4", isFavorited && "fill-current")} />
+            </button>
+          )}
+
+          {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm("Deseja realmente excluir esta questão da plataforma?")) {
+                  onDelete(question.id);
+                }
+              }}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+              title="Excluir questão da plataforma"
+            >
+              <Trash2 className="size-4" />
             </button>
           )}
         </div>

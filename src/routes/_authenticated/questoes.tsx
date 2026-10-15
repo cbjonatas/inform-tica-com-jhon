@@ -82,6 +82,20 @@ function QuestoesPage() {
     },
   });
 
+  const deleteQuestionMutation = useMutation({
+    mutationFn: async (questionId: string) => {
+      const { error } = await supabase.from("questions").delete().eq("id", questionId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["questoes_full_page"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+    onError: (err: any) => {
+      alert(`Erro ao excluir questão: ${err.message}`);
+    },
+  });
+
   const toggleFavorite = async (q: any) => {
     if (!user?.id) return;
     const isFav = favoritedIds.has(q.id);
@@ -318,6 +332,7 @@ function QuestoesPage() {
               userSelectedIndex={currentSelectedIndex}
               isFavorited={favoritedIds.has(q.id)}
               onToggleFavorite={() => toggleFavorite(q)}
+              onDelete={(qId) => deleteQuestionMutation.mutate(qId)}
               onAnswer={(optIdx, isCorrect) => {
                 setSelectedAnswers((prev) => ({ ...prev, [q.id]: optIdx }));
                 recordAttemptMutation.mutate({ qId: q.id, optIndex: optIdx, isCorrect });

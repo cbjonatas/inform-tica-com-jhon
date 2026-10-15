@@ -13,6 +13,7 @@ import {
   FileText,
   HelpCircle,
   Lightbulb,
+  Loader2,
   Play,
   ShieldAlert,
   Sparkles,
@@ -71,6 +72,14 @@ function AulaDetailPage() {
 
   // Respostas de questões
   const [userAnswers, setUserAnswers] = useState<Record<string, number>>({});
+
+  // Estados de Geração IA e Exclusão de Questões
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
+  const [showGenerateQuestionsModal, setShowGenerateQuestionsModal] = useState(false);
+  const [questionCount, setQuestionCount] = useState<number>(5);
+  const [questionDifficulty, setQuestionDifficulty] = useState<"Fácil" | "Médio" | "Difícil">("Médio");
+  const [questionBanca, setQuestionBanca] = useState<string>("Cebraspe");
+  const [questionFeedback, setQuestionFeedback] = useState<string | null>(null);
 
   const { data, isLoading, isPending } = useQuery({
     queryKey: ["aula_detail", aulaId, user?.id],
@@ -273,6 +282,71 @@ function AulaDetailPage() {
   const handleDeleteNote = async (noteId: string) => {
     await supabase.from("notes").delete().eq("id", noteId);
     queryClient.invalidateQueries({ queryKey: ["aula_detail", aulaId] });
+  };
+
+  // Gerar Questões desta Aula com IA (Base exclusiva no material da aula)
+  const handleGenerateLessonQuestions = async () => {
+    if (!aulaId || !lesson) return;
+    setIsGeneratingQuestions(true);
+    try {
+      const generatedList = await aiService.generateQuestions(
+        questionCount,
+        questionDifficulty,
+        {
+          lessonTitle: lesson.title,
+          subject: lesson.subject || lesson.title,
+          part: lesson.part || "",
+          description: lesson.description || "",
+          transcript: lesson.transcript || "",
+          materialsText: materials.map((m: any) => m.title).join(", "),
+          courseTitle: courseData?.title,
+          moduleTitle: moduleData?.title,
+          banca: questionBanca,
+        }
+      );
+
+      const toInsert = generatedList.map((q) => ({
+        course_id: courseData?.id || null,
+        module_id: lesson.module_id || null,
+        lesson_id: aulaId,
+        statement: q.statement,
+        options: q.options,
+        correct_index: q.correct_index,
+        explanation: q.explanation,
+        banca: q.banca || questionBanca,
+        ano: new Date().getFullYear(),
+        difficulty: q.difficulty.toLowerCase(),
+        subject: lesson.subject || lesson.title,
+        subtopic: lesson.part || lesson.title,
+      }));
+
+      const { error } = await supabase.from("questions").insert(toInsert);
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ["aula_detail", aulaId] });
+      queryClient.invalidateQueries({ queryKey: ["questoes_full_page"] });
+      setShowGenerateQuestionsModal(false);
+      setQuestionFeedback(`✓ ${questionCount} questões geradas com base exclusiva no material desta aula!`);
+      setTimeout(() => setQuestionFeedback(null), 4000);
+    } catch (err: any) {
+      alert(`Falha ao gerar questões com IA: ${err?.message || err}`);
+    } finally {
+      setIsGeneratingQuestions(false);
+    }
+  };
+
+  // Excluir Questão da Plataforma
+  const handleDeleteQuestion = async (questionId: string) => {
+    try {
+      const { error } = await supabase.from("questions").delete().eq("id", questionId);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["aula_detail", aulaId] });
+      queryClient.invalidateQueries({ queryKey: ["questoes_full_page"] });
+      setQuestionFeedback("Questão excluída da plataforma.");
+      setTimeout(() => setQuestionFeedback(null), 3000);
+    } catch (err: any) {
+      alert(`Erro ao excluir questão: ${err?.message || err}`);
+    }
   };
 
   // Gerar Resumo com IA
@@ -528,15 +602,141 @@ function AulaDetailPage() {
           {/* ABA 4: QUESTÕES */}
           {activeTab === "questoes" && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-lg font-bold font-display">Questões desta Videoaula</h3>
-                  <p className="text-xs text-muted-foreground">Resolva e confira o comentário imediato.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Resolva questões exclusivas geradas a partir do material e da transcrição desta aula.
+                  </p>
                 </div>
-                <Link to="/questoes/ia" className="text-xs text-accent font-semibold hover:underline flex items-center gap-1">
-                  <Sparkles className="size-3.5" /> Gerar mais questões com IA
-                </Link>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowGenerateQuestionsModal(!showGenerateQuestionsModal)}
+                    className="glow-primary inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 transition-all shadow-sm"
+                  >
+                    <Sparkles className="size-3.5" />
+                    <span>Gerar Questões desta Aula com IA</span>
+                  </button>
+                  <Link
+                    to="/questoes/ia"
+                    search={{ cursoId: courseData?.id, moduloId: lesson.module_id, aulaId: lesson.id }}
+                    className="text-xs text-muted-foreground hover:text-foreground hover:underline hidden sm:inline-flex items-center gap-1 ml-1"
+                  >
+                    Simulado Geral ↗
+                  </Link>
+                </div>
               </div>
+
+              {questionFeedback && (
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3.5 text-xs font-semibold text-emerald-500 animate-fadeIn">
+                  {questionFeedback}
+                </div>
+              )}
+
+              {/* Caixa de Configuração Rápida de Geração com IA */}
+              {showGenerateQuestionsModal && (
+                <div className="panel p-5 border border-primary/40 bg-primary/5 space-y-4 rounded-2xl animate-fadeIn">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="size-4 text-primary" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+                        Gerador IA — Base Exclusiva no Conteúdo Desta Aula
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setShowGenerateQuestionsModal(false)}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    A IA analisará estritamente o título (<strong>{lesson.title}</strong>), o assunto (<strong>{lesson.subject || "Informática"}</strong>), a descrição dos tópicos e a transcrição desta aula para gerar questões de concurso com gabarito comentado.
+                  </p>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                        Quantidade
+                      </label>
+                      <select
+                        value={questionCount}
+                        onChange={(e) => setQuestionCount(Number(e.target.value))}
+                        disabled={isGeneratingQuestions}
+                        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold focus:border-primary focus:outline-none"
+                      >
+                        <option value={3}>3 Questões Rápidas</option>
+                        <option value={5}>5 Questões (Simulado Médio)</option>
+                        <option value={10}>10 Questões (Bateria Completa)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                        Dificuldade
+                      </label>
+                      <select
+                        value={questionDifficulty}
+                        onChange={(e) => setQuestionDifficulty(e.target.value as any)}
+                        disabled={isGeneratingQuestions}
+                        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold focus:border-primary focus:outline-none"
+                      >
+                        <option value="Fácil">Fácil (Conceitos Diretos)</option>
+                        <option value="Médio">Médio (Padrão Concurso)</option>
+                        <option value="Difícil">Difícil (Pegadinhas Avançadas)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                        Banca Examinadora
+                      </label>
+                      <select
+                        value={questionBanca}
+                        onChange={(e) => setQuestionBanca(e.target.value)}
+                        disabled={isGeneratingQuestions}
+                        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold focus:border-primary focus:outline-none"
+                      >
+                        <option value="Cebraspe">Cebraspe (Certo / Errado & Múltipla Escolha)</option>
+                        <option value="FGV">FGV (Casos Práticos)</option>
+                        <option value="Vunesp">Vunesp (Clássica / Objetiva)</option>
+                        <option value="FCC">FCC (Fundação Carlos Chagas)</option>
+                        <option value="Simulado IA">Simulado Geral de Bancas</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowGenerateQuestionsModal(false)}
+                      disabled={isGeneratingQuestions}
+                      className="rounded-xl border border-border px-3.5 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGenerateLessonQuestions}
+                      disabled={isGeneratingQuestions}
+                      className="glow-primary flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                    >
+                      {isGeneratingQuestions ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin" />
+                          <span>Gerando a partir do material desta aula...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="size-3.5" />
+                          <span>Gerar Questões Agora</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-4">
                 {questions.map((q, idx) => (
@@ -545,6 +745,7 @@ function AulaDetailPage() {
                     question={q}
                     questionNumber={idx + 1}
                     userSelectedIndex={userAnswers[q.id]}
+                    onDelete={handleDeleteQuestion}
                     onAnswer={async (selIdx, isCorrect) => {
                       setUserAnswers((prev) => ({ ...prev, [q.id]: selIdx }));
                       if (user?.id) {
@@ -567,9 +768,25 @@ function AulaDetailPage() {
                 ))}
 
                 {questions.length === 0 && (
-                  <p className="text-xs text-muted-foreground py-8 text-center">
-                    Nenhuma questão cadastrada diretamente nesta aula. Acesse o menu Questões para simulados completos.
-                  </p>
+                  <div className="panel p-8 text-center space-y-4 border border-dashed border-border/80">
+                    <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                      <HelpCircle className="size-6" />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-foreground">
+                        Nenhuma questão cadastrada para esta aula ainda
+                      </h4>
+                      <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                        Clique no botão abaixo para gerar questões inéditas com gabarito comentado, formuladas exclusivamente a partir dos tópicos e do conteúdo desta aula.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowGenerateQuestionsModal(true)}
+                      className="glow-primary inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-md hover:opacity-90"
+                    >
+                      <Sparkles className="size-4" /> Gerar Questões desta Aula com IA
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
