@@ -19,6 +19,7 @@ import { useAuth, isEmailAdmin } from "@/lib/auth";
 import { UploadArea } from "@/components/UploadArea";
 import { ProcessingStatus, type ProcessingStep } from "@/components/ProcessingStatus";
 import { aiService } from "@/lib/ai/ai-service";
+import { extractGoogleDriveId, parseVideoSource } from "@/components/VideoPlayer";
 
 export const Route = createFileRoute("/_authenticated/admin/aulas/nova")({
   validateSearch: (search: Record<string, unknown>): { cursoId?: string; moduloId?: string } => ({
@@ -206,6 +207,10 @@ function NovaAulaPage() {
 
     try {
       let finalVideoUrl = videoUrl.trim();
+      const driveId = extractGoogleDriveId(finalVideoUrl);
+      if (driveId) {
+        finalVideoUrl = `https://drive.google.com/file/d/${driveId}/preview`;
+      }
       let finalPdfUrl = pdfUrl.trim();
       let finalCoverUrl = coverUrl.trim();
 
@@ -863,14 +868,57 @@ function NovaAulaPage() {
               onFileSelected={setVideoFile}
             />
             {!videoFile && (
-              <input
-                type="url"
-                value={videoUrl}
-                disabled={isBusy}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="Ou link direto da videoaula (Google Drive, Vimeo, CDN ou Storage)..."
-                className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-xs focus:border-primary focus:outline-none"
-              />
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={videoUrl}
+                  disabled={isBusy}
+                  onChange={(e) => {
+                    let val = e.target.value;
+                    const iframeMatch = val.match(/<iframe.*?src=["']([^"']+)["']/i);
+                    if (iframeMatch && iframeMatch[1]) {
+                      val = iframeMatch[1];
+                    }
+                    setVideoUrl(val);
+                  }}
+                  placeholder="Ou link direto da videoaula (Google Drive, Vimeo, CDN ou Storage)..."
+                  className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-xs focus:border-primary focus:outline-none"
+                />
+
+                {videoUrl.trim() && (
+                  (() => {
+                    const parsed = parseVideoSource(videoUrl);
+                    if (parsed.type === "google-drive") {
+                      return (
+                        <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 text-xs text-blue-400 space-y-1">
+                          <div className="font-semibold flex items-center gap-1.5">
+                            <span className="size-2 rounded-full bg-blue-400 animate-pulse" />
+                            <span>Link do Google Drive reconhecido</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            O vídeo será reproduzido pelo player integrado do Google Drive sem tela preta.
+                            <br />
+                            <strong>Lembrete:</strong> No Google Drive, certifique-se de que o arquivo esteja compartilhado como <em>&quot;Qualquer pessoa com o link pode ver&quot;</em>.
+                          </p>
+                        </div>
+                      );
+                    }
+                    if (parsed.type === "folder") {
+                      return (
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-400 space-y-1">
+                          <div className="font-semibold flex items-center gap-1.5">
+                            <span>⚠️ Link de Pasta do Google Drive</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            Este link aponta para uma pasta. Para reproduzir a aula, copie o link de compartilhamento do arquivo de vídeo específico.
+                          </p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()
+                )}
+              </div>
             )}
           </div>
 
