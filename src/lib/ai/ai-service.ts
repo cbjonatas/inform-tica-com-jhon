@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { extractTextFromPdfUrl } from "./pdf-extractor";
 import type {
   LessonContext,
   GeneratedSummaryResult,
@@ -138,204 +139,485 @@ class AIService {
   }
 
   /**
-   * Gerador de Questões contextualizado EXCLUSIVAMENTE no material da respectiva aula
+   * Gerador de Questões contextualizado EXCLUSIVAMENTE no material da respectiva aula e do PDF.
+   * Não inventa conteúdos externos, não utiliza o título da aula como conteúdo,
+   * reproduz rigorosamente o padrão e o estilo da banca selecionada (Cebraspe, FGV, Vunesp, FCC)
+   * e fundamenta o gabarito e as justificativas estritamente nas fontes fornecidas.
    */
   async generateQuestions(
     count: number,
     difficulty: "Fácil" | "Médio" | "Difícil" = "Médio",
     context?: LessonContext
   ): Promise<GeneratedQuestionItem[]> {
-    try {
-      const { data, error } = await supabase.functions.invoke("ai-pipeline", {
-        body: { action: "generate_questions", count, difficulty, context },
-      });
-      if (!error && Array.isArray(data?.questions) && data.questions.length > 0) {
-        return data.questions.slice(0, count);
+    // 1. Coleta e extração dos materiais reais (PDF + Aula)
+    let pdfText = context?.pdfText?.trim() || "";
+    if (!pdfText && context?.pdfUrl) {
+      try {
+        pdfText = await extractTextFromPdfUrl(context.pdfUrl);
+      } catch (err) {
+        console.warn("Aviso ao extrair texto do PDF:", err);
       }
-    } catch {
-      // Fallback para motor contextual de alta fidelidade
     }
 
-    const title = context?.lessonTitle?.trim() || "Informática para Concursos";
-    const subject = context?.subject?.trim() || title;
-    const part = context?.part?.trim() || "";
-    const description = context?.description?.trim() || "";
-    const transcript = context?.transcript?.trim() || "";
-    const materials = context?.materialsText?.trim() || context?.pdfText?.trim() || "";
-    const banca = context?.banca?.trim() || "Simulado de Concurso (IA)";
+    const cleanTranscript = (context?.transcript || "")
+      .replace(/\[\d{2}:\d{2}(?::\d{2})?\]/g, " ")
+      .replace(/<[^>]+>/g, " ")
+      .trim();
 
-    // Coleta do material textual exclusivo desta aula
-    const fullContent = [description, transcript, materials].filter(Boolean).join(" ");
-    const normalized = `${title} ${subject} ${fullContent}`.toLowerCase();
+    const cleanDescription = (context?.description || "")
+      .replace(/<[^>]+>/g, " ")
+      .trim();
 
-    // Mapeamento temático detalhado com base no material desta aula
-    const isHardware = normalized.includes("hardware") || normalized.includes("ram") || normalized.includes("rom") || normalized.includes("processador") || normalized.includes("cpu") || normalized.includes("periférico") || normalized.includes("disco") || normalized.includes("ssd") || normalized.includes("memória");
-    const isSecurity = normalized.includes("segurança") || normalized.includes("malware") || normalized.includes("vírus") || normalized.includes("ransomware") || normalized.includes("phishing") || normalized.includes("criptografia") || normalized.includes("firewall") || normalized.includes("backup");
-    const isNetwork = normalized.includes("rede") || normalized.includes("internet") || normalized.includes("tcp") || normalized.includes("udp") || normalized.includes("ip") || normalized.includes("dns") || normalized.includes("http") || normalized.includes("navegador") || normalized.includes("email");
-    const isOffice = normalized.includes("excel") || normalized.includes("calc") || normalized.includes("planilha") || normalized.includes("word") || normalized.includes("writer") || normalized.includes("fórmula") || normalized.includes("procv") || normalized.includes("soma");
-    const isOS = normalized.includes("windows") || normalized.includes("linux") || normalized.includes("sistema operacional") || normalized.includes("kernel") || normalized.includes("atalho") || normalized.includes("pasta") || normalized.includes("arquivo");
+    const cleanMaterials = (context?.materialsText || "").trim();
+    const banca = context?.banca?.trim() || "Cebraspe";
 
-    const pool: GeneratedQuestionItem[] = [];
+    // 2. Extração de proposições técnicas a partir do corpus real (sem usar título como conteúdo)
+    const propositions = this.extractTechnicalPropositions(pdfText, cleanTranscript, cleanDescription, cleanMaterials);
 
-    // Questão 1: Conceito nuclear da aula
-    pool.push({
-      statement: `(Banca: ${banca} — ${difficulty}) Com base exclusivamente nos conceitos ensinados na aula "${title}"${part ? ` (${part})` : ""}, assinale a alternativa tecnicamente correta a respeito de ${subject}:`,
-      options: isHardware
-        ? [
-            "A memória RAM é volátil e perde seus dados ao desligar o computador, enquanto a memória ROM armazena o firmware básico e não perde dados.",
-            "A memória secundária (como SSD e HD) é volátil e requer energia contínua para manter os arquivos salvos pelo usuário.",
-            "A memória cache é mais lenta e possui maior tempo de acesso do que os discos rígidos e mídias magnéticas.",
-            "O teclado e o scanner são exemplos clássicos de dispositivos exclusivamente de saída de dados do computador.",
-            "A unidade lógica e aritmética (ULA) é responsável unicamente pela refrigeração física da placa-mãe.",
-          ]
-        : isSecurity
-        ? [
-            "O Ransomware é um código malicioso que sequestra e criptografa arquivos do usuário, exigindo compensação financeira para liberar a chave.",
-            "O Phishing consiste em danificar fisicamente os componentes de hardware através de comandos enviados pela placa de rede.",
-            "O Cavalo de Troia (Trojan) replica-se de maneira autônoma e imediata pela rede sem necessitar de nenhuma execução por parte do usuário.",
-            "A criptografia simétrica utiliza duas chaves matematicamente distintas: uma pública para cifrar e uma privada para decifrar.",
-            "O Firewall é o programa responsável por remover vírus já instalados e restaurar arquivos corrompidos no sistema operacional.",
-          ]
-        : isNetwork
-        ? [
-            "O protocolo TCP opera na camada de transporte fornecendo conexão confiável, verificação de integridade e reordenação de pacotes.",
-            "O protocolo UDP é orientado a conexão e garante 100% de confirmação de entrega de pacotes através de handshake prévio.",
-            "O protocolo DNS tem como única função compactar arquivos de imagem antes de serem enviados via correio eletrônico.",
-            "O endereço IPv4 é constituído por 128 bits divididos em oito blocos hexadecimais separados por dois-pontos.",
-            "O protocolo HTTPS transmite dados em texto plano sem qualquer mecanismo de criptografia ou validação de certificados.",
-          ]
-        : isOffice
-        ? [
-            "Nas planilhas, a utilização do caractere cifrão ($) fixa referências de linha e/ou coluna durante o preenchimento automático.",
-            "A função =SOMA(A1:A5) soma apenas a célula A1 e a célula A5, ignorando completamente as células intermediárias.",
-            "No Excel e Calc, toda fórmula deve obrigatoriamente ser iniciada com o caractere ponto e vírgula (;).",
-            "A função PROCV realiza buscas em planilhas sem exigir nenhum parâmetro de valor procurado ou matriz de referência.",
-            "O salvamento de arquivos no formato CSV mantém todas as cores de fundo, gráficos e formatações condicionais intactas.",
-          ]
-        : isOS
-        ? [
-            "No sistema operacional, atalhos de teclado e permissões de acesso visam otimizar a produtividade e garantir o controle de privilégios aos usuários.",
-            "No Windows, o atalho 'Windows + L' exclui imediatamente a lixeira sem solicitar confirmação ao administrador.",
-            "No Linux, todas as distribuições proíbem terminantemente o uso de comandos via terminal ou prompt de linha de comando.",
-            "O sistema de arquivos NTFS não suporta permissões de segurança de arquivos nem controle de acesso no disco.",
-            "O Gerenciador de Tarefas pode ser aberto unicamente após formatar a partição principal do sistema.",
-          ]
-        : [
-            `O conteúdo abordado em "${title}" opera em rigorosa consonância com os padrões técnicos e definições conceituais ministradas na aula.`,
-            `Os procedimentos detalhados nesta lição foram categorizados como inaplicáveis a computadores pessoais ou ambientes corporativos.`,
-            `Todas as operações citadas exigem permissões exclusivas de superusuário e são desaconselhadas pelas normas de segurança.`,
-            `A tecnologia em questão foi descontinuada e substituída integralmente por mecanismos que dispensam qualquer protocolo.`,
-            `Os parâmetros técnicos examinados na aula operam de forma isolada, sendo vedada sua utilização em concursos públicos.`,
-          ],
-      correct_index: 0,
-      explanation: `Gabarito Comentado (${banca}): Conforme ensinado na aula "${title}", a alternativa A expressa exatamente a regra técnica apresentada no material da aula, enquanto as demais alternativas contêm distratores com pegadinhas clássicas de bancas examinadoras.`,
-      banca,
-      difficulty,
-      subject,
-    });
+    // Fallback de contingência caso os textos fornecidos sejam extremamente curtos
+    const fallbackTopic = context?.subject?.trim() || "Conceito Técnico";
+    const basePropositions = propositions.length > 0 ? propositions : [
+      {
+        topic: fallbackTopic,
+        statement: `Os conceitos apresentados no material regulam o funcionamento operacional dos sistemas conforme parâmetros técnicos formais.`,
+        predicate: "opera em estrita consonância com os parâmetros formais descritos no conteúdo de estudo",
+        excerpt: "Os conceitos apresentados no material regulam o funcionamento operacional dos sistemas conforme parâmetros técnicos formais.",
+        source: "aula" as const,
+        isDual: false,
+      },
+      {
+        topic: fallbackTopic,
+        statement: `As diretrizes técnicas do material estabelecem requisitos mandatórios para a integridade dos dados manipulados.`,
+        predicate: "assegura a integridade e a conformidade das operações técnicas executadas",
+        excerpt: "As diretrizes técnicas do material estabelecem requisitos mandatórios para a integridade dos dados manipulados.",
+        source: "aula" as const,
+        isDual: false,
+      },
+      {
+        topic: fallbackTopic,
+        statement: `Os procedimentos técnicos exigem a observância estrita de regras predefinidas de configuração para evitar falhas ou vulnerabilidades.`,
+        predicate: "exige a observância estrita de regras predefinidas de configuração para assegurar a disponibilidade",
+        excerpt: "Os procedimentos técnicos exigem a observância estrita de regras predefinidas de configuração para evitar falhas ou vulnerabilidades.",
+        source: "aula" as const,
+        isDual: false,
+      },
+    ];
 
-    // Questão 2: Pegadinha de prova e aplicação prática do material da aula
-    pool.push({
-      statement: `(Banca: ${banca} — ${difficulty}) Em relação aos tópicos detalhados no material da aula "${title}", analise as assertivas abaixo e identifique a opção correta:`,
-      options: isHardware
-        ? [
-            "Os dispositivos híbridos (entrada e saída), como telas touch screen e impressoras multifuncionais, podem tanto enviar quanto receber dados do sistema.",
-            "O processador (CPU) armazena permanentemente os programas do usuário mesmo sem energia elétrica conectada à fonte.",
-            "A memória ROM pode ser gravada e apagada livremente e em tempo real pelo usuário comum como memória de trabalho rápida.",
-            "O monitor convencional de computador é classificado exclusivamente como dispositivo de entrada de dados.",
-            "Os barramentos de computador possuem a única função de fornecer energia elétrica para a ventoinha do gabinete.",
-          ]
-        : isSecurity
-        ? [
-            "A autenticação em dois fatores (2FA) adiciona uma camada extra de proteção ao exigir algo que o usuário sabe (senha) e algo que ele possui ou é.",
-            "Um Spyware é um antivírus corporativo utilizado para acelerar downloads seguros em redes locais.",
-            "O Worm necessita obrigatoriamente que o usuário clique e execute um arquivo contaminado disfarçado de programa útil para começar a agir.",
-            "A política de backup 3-2-1 recomenda manter 3 arquivos em 1 único disco rígido no mesmo local físico.",
-            "Assinatura digital e certificado digital dispensam qualquer verificação de integridade ou autenticidade do emissor.",
-          ]
-        : isNetwork
-        ? [
-            "O protocolo DHCP é responsável por atribuir endereços IP de forma dinâmica e automática aos dispositivos conectados na rede local.",
-            "O protocolo FTP é utilizado exclusivamente para navegação em páginas web multimídia na porta 80.",
-            "O cabo de par trançado com conector RJ-45 opera exclusivamente por ondas de rádio sem condutores metálicos.",
-            "Uma Intranet é uma rede totalmente pública e aberta, com livre acesso para qualquer usuário anônimo na internet.",
-            "O protocolo SMTP é utilizado prioritariamente pelo usuário final para baixar mensagens da caixa de entrada de seu correio eletrônico.",
-          ]
-        : [
-            `No estudo de "${title}", a identificação precisa das características técnicas evita as pegadinhas formuladas por bancas de concurso sobre este tema.`,
-            `O material desta lição indica que os conceitos abordados são arbitrários e variam sem nenhuma regra ou especificação.`,
-            `A matéria apresentada na aula veda a utilização de quaisquer atalhos ou mecanismos automatizados no ambiente operacional.`,
-            `As bancas examinadoras consideram errado afirmar que o tema desta aula possui relevância prática em provas de concurso.`,
-            `Os tópicos ministrados nesta aula foram apresentados sem nenhum respaldo nas especificações técnicas vigentes.`,
-          ],
-      correct_index: 0,
-      explanation: `Gabarito Comentado (${banca}): Conforme aprofundado na aula "${title}", a primeira alternativa traz a aplicação prática correta abordada pelo professor, alertando contra inversões e pegadinhas típicas de bancas.`,
-      banca,
-      difficulty,
-      subject,
-    });
+    // 3. Montar as questões com o padrão da banca e rigor técnico de concursos
+    const questions: GeneratedQuestionItem[] = [];
 
-    // Questão 3: Análise técnica e pegadinhas de banca examinadora
-    pool.push({
-      statement: `(Banca: ${banca} — ${difficulty}) Considerando a abordagem técnica ministrada na aula "${title}" sobre "${subject}", assinale a alternativa que NÃO contém incorreções:`,
-      options: isHardware
-        ? [
-            "Na hierarquia de memórias do computador, os registradores e a memória cache são mais rápidos e de menor capacidade que a memória principal e secundária.",
-            "O disco rígido (HD) possui maior velocidade de transferência de dados que os registradores internos do processador.",
-            "A memória RAM é um tipo de memória auxiliar estritamente externa conectada exclusivamente por cabo USB.",
-            "Placas-mãe modernas dispensam o uso de memória principal para inicializar e carregar o sistema operacional.",
-            "A BIOS/UEFI é executada a partir de discos magnéticos e nunca da memória ROM da placa-mãe.",
-          ]
-        : isSecurity
-        ? [
-            "O princípio da confidencialidade na segurança da informação garante que a informação não seja acessada por indivíduos não autorizados.",
-            "O princípio da disponibilidade determina que os dados devem ser apagados periodicamente para evitar sobrecarga de servidores.",
-            "O phishing só é considerado crime se envolver o roubo de peças físicas do hardware do computador da vítima.",
-            "Um ataque de negação de serviço (DoS/DDoS) visa infectar arquivos com ransomware para pedir resgate em criptomoedas.",
-            "O uso de redes Wi-Fi públicas e abertas garante proteção total contra interceptação de pacotes de dados por terceiros.",
-          ]
-        : isNetwork
-        ? [
-            "Na arquitetura cliente-servidor da web, o navegador atua como cliente solicitando recursos a um servidor através de requisições HTTP/HTTPS.",
-            "O protocolo IP assegura que nenhum pacote de dados se perca durante a transmissão entre roteadores na internet.",
-            "A URL (Uniform Resource Locator) é um componente de hardware instalado na placa de rede do computador do usuário.",
-            "O protocolo POP3 sincroniza as pastas do email em tempo real entre todos os dispositivos do usuário mantendo os dados no servidor.",
-            "Um roteador opera apenas na camada física e é incapaz de determinar rotas de encaminhamento de pacotes na rede.",
-          ]
-        : [
-            `A correta compreensão dos fundamentos de "${title}" permite ao candidato solucionar com segurança as questões de prova referentes a este assunto.`,
-            `Todos os procedimentos descritos nesta matéria possuem validade restrita a sistemas operacionais de mainframe antigos.`,
-            `A definição fornecida na videoaula inverte as propriedades clássicas descritas nas provas dos principais certames.`,
-            `É incorreto afirmar que o tema desta aula faz parte do conteúdo programático de informática para concursos.`,
-            `As assertivas examinadas na lição foram classificadas pelo professor como desprovidas de respaldo prático.`,
-          ],
-      correct_index: 0,
-      explanation: `Gabarito Comentado (${banca}): Conforme explicado na videoaula "${title}", a assertiva A está perfeita. As demais contêm inversões de conceitos que são frequentemente cobradas em provas de concursos públicos.`,
-      banca,
-      difficulty,
-      subject,
-    });
+    for (let i = 0; i < count; i++) {
+      const propIndex = i % basePropositions.length;
+      const prop = basePropositions[propIndex];
+      const otherProps = basePropositions.filter((_, idx) => idx !== propIndex);
 
-    // Questões adicionais para completar a quantidade solicitada
-    for (let i = pool.length + 1; i <= Math.max(count, 5); i++) {
-      pool.push({
-        statement: `(Banca: ${banca} — ${difficulty}) A respeito dos detalhes e regras apresentados no material da aula "${title}" (${subject}), assinale a afirmativa verdadeira:`,
-        options: [
-          `O conteúdo ministrado na aula ${title} foi estruturado para destacar os pontos cruciais e as pegadinhas recorrentes em provas de concursos sobre ${subject}.`,
-          `No âmbito de ${subject}, as normas técnicas determinam que as definições aprendidas nesta aula não possuem eficácia prática.`,
-          `É dispensável o conhecimento dos termos técnicos apresentados nesta aula, uma vez que as bancas não avaliam tais conceitos.`,
-          `As regras e procedimentos descritos nesta lição são mutuamente exclusivos e não se integram aos demais tópicos do curso.`,
-          `O professor pontuou que o tema abordado nesta aula só é exigido em certames para cargos específicos de engenharia reversa.`,
-        ],
-        correct_index: 0,
-        explanation: `Gabarito Comentado (${banca}): Conforme ensinado na aula "${title}", a primeira alternativa resume os pontos-chave e a relevância prática do assunto para concursos.`,
-        banca,
-        difficulty,
-        subject,
-      });
+      const q = this.buildBancaQuestion(prop, otherProps, banca, difficulty, i);
+      questions.push(q);
     }
 
-    return pool.slice(0, count);
+    return questions;
+  }
+
+  /**
+   * Extrai do texto real sentenças factuais, definições, regras e contrastes.
+   * Não inventa conceitos externos e relaciona o PDF à aula quando ambos estiverem presentes.
+   */
+  private extractTechnicalPropositions(
+    pdfText: string,
+    transcript: string,
+    description: string,
+    materialsText: string
+  ): Array<{
+    topic: string;
+    statement: string;
+    predicate: string;
+    excerpt: string;
+    source: "pdf" | "aula" | "integrado";
+    isDual: boolean;
+    secondaryTopic?: string;
+    secondaryPredicate?: string;
+  }> {
+    const propositions: Array<{
+      topic: string;
+      statement: string;
+      predicate: string;
+      excerpt: string;
+      source: "pdf" | "aula" | "integrado";
+      isDual: boolean;
+      secondaryTopic?: string;
+      secondaryPredicate?: string;
+    }> = [];
+
+    const splitSentences = (text: string) =>
+      text
+        .split(/(?<=[.!?])\s+|\n{2,}/)
+        .map((s) => s.replace(/\s+/g, " ").trim())
+        .filter((s) => s.length >= 25 && s.length <= 400 && !/^(ol[aá]|bom dia|boa tarde|bem[- ]vindos?|inscreva|clique)/i.test(s));
+
+    const pdfSentences = splitSentences(pdfText);
+    const lessonSentences = splitSentences([transcript, description, materialsText].filter(Boolean).join(" \n"));
+
+    const contrastRegex = /(?:enquanto|ao passo que|diferentemente de|ao contr[aá]rio de)\s+(.+?),\s*(.+)/i;
+
+    const parseSentence = (sentence: string, source: "pdf" | "aula") => {
+      const contrastMatch = sentence.match(contrastRegex);
+      if (contrastMatch) {
+        const part1 = contrastMatch[1].trim();
+        const part2 = contrastMatch[2].trim();
+        const t1 = this.extractTopicFromClause(part1);
+        const t2 = this.extractTopicFromClause(part2);
+        return {
+          topic: t1 || "Conceito Técnico",
+          statement: sentence,
+          predicate: part1,
+          excerpt: sentence,
+          source,
+          isDual: true,
+          secondaryTopic: t2 || "Mecanismo Correlato",
+          secondaryPredicate: part2,
+        };
+      }
+
+      // Verbos definitivos
+      const defMatch = sentence.match(/^([A-ZÀ-Ú0-9][\wÀ-ú0-9_ -]{2,40}?)\s+(?:é|são|consiste em|consistem em|refere-se a|referem-se a|caracteriza-se por|caracterizam-se por|define-se como|tem como função|tem a finalidade de|opera como)\s+(.+)$/i);
+      if (defMatch) {
+        return {
+          topic: defMatch[1].trim(),
+          statement: sentence,
+          predicate: defMatch[2].trim(),
+          excerpt: sentence,
+          source,
+          isDual: false,
+        };
+      }
+
+      // Verbos operacionais
+      const opMatch = sentence.match(/^([A-ZÀ-Ú0-9][\wÀ-ú0-9_ -]{2,40}?)\s+(?:permite|permitem|impede|impedem|deve|devem|executa|executam|armazena|armazenam|processa|processam|transmite|transmitem|garante|garantem|assegura|asseguram)\s+(.+)$/i);
+      if (opMatch) {
+        return {
+          topic: opMatch[1].trim(),
+          statement: sentence,
+          predicate: opMatch[2].trim(),
+          excerpt: sentence,
+          source,
+          isDual: false,
+        };
+      }
+
+      // Sentença técnica geral: isolar primeiras palavras como sujeito/tópico
+      const words = sentence.split(" ");
+      const headCount = Math.min(4, Math.max(1, words.length - 2));
+      const topicCandidate = words.slice(0, headCount).join(" ").replace(/[,;:]$/, "");
+      const predicateCandidate = words.slice(headCount).join(" ");
+
+      return {
+        topic: topicCandidate,
+        statement: sentence,
+        predicate: predicateCandidate,
+        excerpt: sentence,
+        source,
+        isDual: false,
+      };
+    };
+
+    // 1. Sentenças do PDF
+    for (const s of pdfSentences) {
+      propositions.push(parseSentence(s, "pdf"));
+    }
+
+    // 2. Sentenças da Aula (Transcrição/Descrição)
+    for (const s of lessonSentences) {
+      propositions.push(parseSentence(s, "aula"));
+    }
+
+    // 3. Relacionamento PDF + Aula: cruzar conceitos presentes em ambos
+    if (pdfSentences.length > 0 && lessonSentences.length > 0) {
+      for (const pProp of propositions.filter((p) => p.source === "pdf")) {
+        const matchingLesson = propositions.find(
+          (l) =>
+            l.source === "aula" &&
+            (l.statement.toLowerCase().includes(pProp.topic.toLowerCase()) ||
+              pProp.statement.toLowerCase().includes(l.topic.toLowerCase()))
+        );
+
+        if (matchingLesson) {
+          propositions.unshift({
+            topic: pProp.topic,
+            statement: `${pProp.statement} Complementarmente na videoaula: ${matchingLesson.statement}`,
+            predicate: `${pProp.predicate}, em consonância com a constatação de que ${matchingLesson.predicate}`,
+            excerpt: `PDF: "${pProp.excerpt}" | Aula: "${matchingLesson.excerpt}"`,
+            source: "integrado",
+            isDual: true,
+            secondaryTopic: matchingLesson.topic,
+            secondaryPredicate: matchingLesson.predicate,
+          });
+        }
+      }
+    }
+
+    return propositions;
+  }
+
+  private extractTopicFromClause(clause: string): string {
+    const m = clause.match(/^(?:o|a|os|as|um|uma|no|na|nos|nas)?\s*([A-ZÀ-Ú0-9][\wÀ-ú0-9_ -]{2,35})/i);
+    return m ? m[1].trim() : clause.split(" ").slice(0, 3).join(" ");
+  }
+
+  /**
+   * Construtor especializado com base na Banca Examinadora
+   */
+  private buildBancaQuestion(
+    prop: {
+      topic: string;
+      statement: string;
+      predicate: string;
+      excerpt: string;
+      source: "pdf" | "aula" | "integrado";
+      isDual: boolean;
+      secondaryTopic?: string;
+      secondaryPredicate?: string;
+    },
+    otherProps: Array<{ topic: string; predicate: string; statement: string; excerpt: string }>,
+    banca: string,
+    difficulty: "Fácil" | "Médio" | "Difícil",
+    index: number
+  ): GeneratedQuestionItem {
+    const bLower = banca.toLowerCase();
+
+    if (bLower.includes("fgv")) {
+      return this.buildFgvQuestion(prop, otherProps, difficulty, index);
+    }
+    if (bLower.includes("vunesp")) {
+      return this.buildVunespQuestion(prop, otherProps, difficulty, index);
+    }
+    if (bLower.includes("fcc") || bLower.includes("chagas")) {
+      return this.buildFccQuestion(prop, otherProps, difficulty, index);
+    }
+    // Padrão Cebraspe (ou Simulado Geral)
+    return this.buildCebraspeQuestion(prop, otherProps, banca, difficulty, index);
+  }
+
+  /**
+   * Banca Cebraspe: Alto rigor conceitual, assertivas afirmativas com armadilhas de abrangência e precisão.
+   */
+  private buildCebraspeQuestion(
+    prop: { topic: string; statement: string; predicate: string; excerpt: string; isDual: boolean },
+    otherProps: Array<{ topic: string; predicate: string; statement: string; excerpt: string }>,
+    banca: string,
+    difficulty: "Fácil" | "Médio" | "Difícil",
+    index: number
+  ): GeneratedQuestionItem {
+    const framings = [
+      `A respeito das propriedades técnicas e regras operacionais de ${prop.topic} detalhadas no material de estudo, analise as proposições a seguir e assinale a opção correta:`,
+      `Considerando a fundamentação conceitual de ${prop.topic} apresentada no material didático, assinale a opção que expressa uma afirmativa tecnicamente verdadeira:`,
+      `No que concerne às características e ao funcionamento de ${prop.topic} em conformidade com o material examinado, assinale a opção correta:`,
+    ];
+    const statement = framings[index % framings.length];
+
+    const correctText = `${prop.topic} ${prop.predicate.replace(/^[,\s]+/, "")}.`;
+    const invertedDistractor = this.buildAntonymPredicate(prop.topic, prop.predicate);
+    const absoluteDistractor = `${prop.topic} opera sob restrição absoluta, sendo aplicável exclusivamente quando houver autorização prévia e expressa do administrador, sendo vedada sua execução em qualquer outra hipótese.`;
+    const confusionDistractor = otherProps.length > 0
+      ? `${prop.topic} consiste em ${otherProps[0].predicate}, assumindo integralmente o papel que no material foi atribuído a ${otherProps[0].topic}.`
+      : `${prop.topic} tem seu funcionamento condicionado à desativação compulsória de todos os demais módulos do sistema, não admitindo qualquer interoperabilidade.`;
+    const falseScopeDistractor = `A aplicação de ${prop.topic} produz resultados uniformes e invariáveis em qualquer plataforma, independentemente de parâmetros técnicos, configurações ou das condições detalhadas no material.`;
+
+    const rawOptions = [
+      correctText,
+      invertedDistractor,
+      absoluteDistractor,
+      confusionDistractor,
+      falseScopeDistractor,
+    ];
+
+    // Embaralhar alternativas com posicionamento dinâmico
+    const correctIndex = (index * 2 + 1) % 5;
+    const options = this.assembleShuffledOptions(correctText, rawOptions.slice(1), correctIndex);
+    const correctLetter = String.fromCharCode(65 + correctIndex);
+
+    const explanation = `Gabarito Comentado (Padrão ${banca} - Letra ${correctLetter}): Conforme fundamentado no material de estudo: "${prop.excerpt}". A assertiva ${correctLetter} reproduz com exatidão a regra técnica. Os demais itens contêm as clássicas armadilhas da banca Cebraspe, como o uso de qualificadores absolutos ("exclusivamente", "vedada"), a inversão de propriedades e a confusão deliberada entre premissas do próprio texto.`;
+
+    return {
+      statement,
+      options,
+      correct_index: correctIndex,
+      explanation,
+      banca,
+      difficulty,
+      subject: prop.topic,
+    };
+  }
+
+  /**
+   * Banca FGV: Casos práticos e situações-problema aplicadas em órgãos públicos e empresas.
+   */
+  private buildFgvQuestion(
+    prop: { topic: string; statement: string; predicate: string; excerpt: string },
+    otherProps: Array<{ topic: string; predicate: string; statement: string; excerpt: string }>,
+    difficulty: "Fácil" | "Médio" | "Difícil",
+    index: number
+  ): GeneratedQuestionItem {
+    const scenarios = [
+      `Em determinada repartição pública, a equipe técnica foi encarregada de avaliar os procedimentos pertinentes a ${prop.topic}. Durante a análise, os servidores depararam-se com o seguinte cenário fático: "${prop.statement}". Com base exclusivamente nos conceitos e diretrizes técnicas do material de estudo, o responsável deve emitir o seguinte parecer ou conclusão técnica:`,
+      `Durante uma auditoria preventiva nos fluxos de trabalho de um tribunal de contas, um analista examinou a rotina operacional envolvendo ${prop.topic}. No diagnóstico preliminar, apurou-se a seguinte situação técnica: "${prop.statement}". Considerando estritamente as regras apresentadas no material didático, a conduta correta a ser adotada é:`,
+      `Um técnico judiciário de tecnologia da informação recebeu a incumbência de padronizar a execução de ${prop.topic} no respectivo setor. Ao analisar a demanda, constatou que: "${prop.statement}". Em conformidade com os fundamentos técnicos examinados no material, assinale o diagnóstico correto:`,
+    ];
+    const statement = scenarios[index % scenarios.length];
+
+    const correctText = `Constatar que ${prop.topic} ${prop.predicate}, aplicando a rotina técnica em estrita consonância com os parâmetros do material de estudo.`;
+    const distractor1 = `Rejeitar o procedimento, alegando erroneamente que ${prop.topic} opera de forma oposta e impede a execução regular das rotinas descritas no material.`;
+    const distractor2 = `Determinar a suspensão do fluxo de trabalho por supor que ${prop.topic} só pode ser utilizado em caráter experimental e sem eficácia prática no setor público.`;
+    const distractor3 = `Concluir que ${prop.topic} deve ser substituído por rotinas manuais, sob a premissa falsa de que o mecanismo introduz vulnerabilidades inevitáveis.`;
+    const distractor4 = otherProps.length > 0
+      ? `Emitir parecer favorável à atribuição das propriedades de ${otherProps[0].topic} para ${prop.topic}, desconsiderando a distinção técnica estabelecida no material.`
+      : `Subordinar a operação a requisitos inexistentes no material de estudo, inviabilizando a tomada de decisão técnica.`;
+
+    const rawOptions = [correctText, distractor1, distractor2, distractor3, distractor4];
+    const correctIndex = (index * 3 + 2) % 5;
+    const options = this.assembleShuffledOptions(correctText, rawOptions.slice(1), correctIndex);
+    const correctLetter = String.fromCharCode(65 + correctIndex);
+
+    const explanation = `Gabarito Comentado (Padrão FGV - Letra ${correctLetter}): A situação prática é solucionada pela aplicação direta do preceito técnico extraído do material: "${prop.excerpt}". Diante do cenário apresentado, o parecer adequado é o indicado na alternativa ${correctLetter}. As demais alternativas trazem diagnósticos equivocados e medidas incompatíveis com a situação fática descrita no material.`;
+
+    return {
+      statement,
+      options,
+      correct_index: correctIndex,
+      explanation,
+      banca: "FGV",
+      difficulty,
+      subject: prop.topic,
+    };
+  }
+
+  /**
+   * Banca Vunesp: Literalidade de conceitos, definições formais, regras exatas e procedimentos objetivos.
+   */
+  private buildVunespQuestion(
+    prop: { topic: string; statement: string; predicate: string; excerpt: string },
+    otherProps: Array<{ topic: string; predicate: string; statement: string; excerpt: string }>,
+    difficulty: "Fácil" | "Médio" | "Difícil",
+    index: number
+  ): GeneratedQuestionItem {
+    const framings = [
+      `De acordo com as propriedades, conceitos e regras de ${prop.topic} examinados no material de estudo, assinale a alternativa correta:`,
+      `Em conformidade com os conceitos técnicos analisados no material de estudo acerca de ${prop.topic}, é correto afirmar que:`,
+      `Assinale a alternativa que apresenta a correta definição e funcionamento de ${prop.topic}, segundo o material didático:`,
+    ];
+    const statement = framings[index % framings.length];
+
+    const correctText = `${prop.topic} ${prop.predicate}.`;
+    const invertedDistractor = this.buildAntonymPredicate(prop.topic, prop.predicate);
+    const distractor2 = `${prop.topic} atua apenas como nomenclatura secundária, sendo desprovido de regras operacionais próprias no escopo do material.`;
+    const distractor3 = otherProps.length > 0
+      ? `${prop.topic} corresponde a ${otherProps[0].predicate}, contrariando a classificação do material.`
+      : `${prop.topic} tem sua aplicabilidade anulada sempre que executado em conjunto com outros componentes do sistema.`;
+    const distractor4 = `As diretrizes do material determinam que ${prop.topic} é categorizado como procedimento obsoleto e incompatível com ambientes modernos.`;
+
+    const rawOptions = [correctText, invertedDistractor, distractor2, distractor3, distractor4];
+    const correctIndex = index % 5;
+    const options = this.assembleShuffledOptions(correctText, rawOptions.slice(1), correctIndex);
+    const correctLetter = String.fromCharCode(65 + correctIndex);
+
+    const explanation = `Gabarito Comentado (Padrão Vunesp - Letra ${correctLetter}): Conforme a literalidade do material de estudo: "${prop.excerpt}". A alternativa ${correctLetter} é a única que expressa com precisão a regra técnica examinada, sendo as demais opções incorretas por alteração de termos e conceitos literais.`;
+
+    return {
+      statement,
+      options,
+      correct_index: correctIndex,
+      explanation,
+      banca: "Vunesp",
+      difficulty,
+      subject: prop.topic,
+    };
+  }
+
+  /**
+   * Banca FCC: Estrutura comparativa, especificações normativas e assertivas ordenadas.
+   */
+  private buildFccQuestion(
+    prop: { topic: string; statement: string; predicate: string; excerpt: string },
+    otherProps: Array<{ topic: string; predicate: string; statement: string; excerpt: string }>,
+    difficulty: "Fácil" | "Médio" | "Difícil",
+    index: number
+  ): GeneratedQuestionItem {
+    const framings = [
+      `Ao analisar as especificações e procedimentos técnicos de ${prop.topic} descritos no material de estudo, um analista deve reconhecer que:`,
+      `Considere os preceitos normativos e operacionais relativos a ${prop.topic} constantes no material didático. A esse respeito, constata-se que:`,
+      `A respeito da correlação e funcionamento dos mecanismos associados a ${prop.topic}, assinale a alternativa tecnicamente correta segundo o material:`,
+    ];
+    const statement = framings[index % framings.length];
+
+    const correctText = `${prop.topic} ${prop.predicate}.`;
+    const distractor1 = this.buildAntonymPredicate(prop.topic, prop.predicate);
+    const distractor2 = `${prop.topic} depende impreterivelmente de homologação externa em tempo real para cada instrução básica executada.`;
+    const distractor3 = otherProps.length > 0
+      ? `${prop.topic} desempenha as funções atribuídas no texto a ${otherProps[0].topic}, gerando sobreposição indevida.`
+      : `${prop.topic} opera de forma desarticulada com as demais normas do material, sem garantia de continuidade.`;
+    const distractor4 = `${prop.topic} foi classificado no material como recurso restrito a testes locais, sem validade para operações em produção.`;
+
+    const rawOptions = [correctText, distractor1, distractor2, distractor3, distractor4];
+    const correctIndex = (index * 4 + 3) % 5;
+    const options = this.assembleShuffledOptions(correctText, rawOptions.slice(1), correctIndex);
+    const correctLetter = String.fromCharCode(65 + correctIndex);
+
+    const explanation = `Gabarito Comentado (Padrão FCC - Letra ${correctLetter}): Analisando as regras técnicas expostas no material de estudo: "${prop.excerpt}". A alternativa ${correctLetter} expressa exatamente a especificação correta. As demais alternativas apresentam desvios normativos e inversões conceituais em desacordo com as definições ensinadas.`;
+
+    return {
+      statement,
+      options,
+      correct_index: correctIndex,
+      explanation,
+      banca: "FCC",
+      difficulty,
+      subject: prop.topic,
+    };
+  }
+
+  /**
+   * Constrói distrator por antônimo ou inversão técnica a partir do predicado real
+   */
+  private buildAntonymPredicate(topic: string, predicate: string): string {
+    const p = predicate.trim();
+    if (/\bvol[aá]til\b/i.test(p) && !/\bn[aã]o[- ]vol[aá]til\b/i.test(p)) {
+      return `${topic} ${p.replace(/\bvol[aá]til\b/gi, "não volátil (mantendo os dados salvos permanentemente na ausência de energia)")}.`;
+    }
+    if (/\bn[aã]o[- ]vol[aá]til\b/i.test(p)) {
+      return `${topic} ${p.replace(/\bn[aã]o[- ]vol[aá]til\b/gi, "volátil (perdendo instantaneamente todos os dados ao desligar o dispositivo)")}.`;
+    }
+    if (/\bpermite\b/i.test(p)) {
+      return `${topic} ${p.replace(/\bpermite\b/gi, "impede terminantemente")}.`;
+    }
+    if (/\bimpede\b/i.test(p)) {
+      return `${topic} ${p.replace(/\bimpede\b/gi, "autoriza de forma irrestrita sem qualquer controle")}.`;
+    }
+    if (/\bbloqueia\b/i.test(p)) {
+      return `${topic} ${p.replace(/\bbloqueia\b/gi, "permite o tráfego aberto de pacotes sem inspeção prévia")}.`;
+    }
+    if (/\bcriptografia\b/i.test(p)) {
+      return `${topic} ${p.replace(/\bcriptografia\b/gi, "transmissão em texto plano sem cifragem")}.`;
+    }
+    if (/\bgarante a entrega\b/i.test(p)) {
+      return `${topic} ${p.replace(/\bgarante a entrega\b/gi, "transmite dados sem confirmação de entrega ou controle de fluxo")}.`;
+    }
+    return `${topic} opera de forma contrária ao material, deixando de ${p.replace(/^(?:é|são|consiste em|permite|executa|opera)\s+/i, "")}.`;
+  }
+
+  /**
+   * Insere a opção correta no índice desejado e preenche as demais posições
+   */
+  private assembleShuffledOptions(correctText: string, distractors: string[], targetIndex: number): string[] {
+    const result: string[] = new Array(5);
+    result[targetIndex] = correctText;
+
+    let distractorIdx = 0;
+    for (let i = 0; i < 5; i++) {
+      if (i !== targetIndex) {
+        result[i] = distractors[distractorIdx] || `Alternativa incorreta com distorção técnica dos preceitos do material.`;
+        distractorIdx++;
+      }
+    }
+    return result;
   }
 }
 

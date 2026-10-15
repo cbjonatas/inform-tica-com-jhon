@@ -289,6 +289,8 @@ function AulaDetailPage() {
     if (!aulaId || !lesson) return;
     setIsGeneratingQuestions(true);
     try {
+      const pdfUrl = lesson.pdf_url || materials.find((m: any) => m.file_url?.toLowerCase().includes(".pdf"))?.file_url || undefined;
+
       const generatedList = await aiService.generateQuestions(
         questionCount,
         questionDifficulty,
@@ -298,6 +300,7 @@ function AulaDetailPage() {
           part: lesson.part || "",
           description: lesson.description || "",
           transcript: lesson.transcript || "",
+          pdfUrl,
           materialsText: materials.map((m: any) => m.title).join(", "),
           courseTitle: courseData?.title,
           moduleTitle: moduleData?.title,

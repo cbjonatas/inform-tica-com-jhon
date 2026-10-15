@@ -130,21 +130,33 @@ function GeradorQuestoesIaPage() {
       let contextTitle = activeLesson?.title || "";
       let contextPart: number | undefined;
 
+      let contextPdfUrl: string | undefined;
+
       if (selectedLesson) {
-        const { data: lessonData } = await supabase
-          .from("lessons")
-          .select("id, title, description, transcript, part, materials")
-          .eq("id", selectedLesson)
-          .maybeSingle();
+        const [lessonRes, matsRes] = await Promise.all([
+          supabase
+            .from("lessons")
+            .select("id, title, description, transcript, part, pdf_url")
+            .eq("id", selectedLesson)
+            .maybeSingle(),
+          supabase
+            .from("materials")
+            .select("title, file_url")
+            .eq("lesson_id", selectedLesson),
+        ]);
+
+        const lessonData = lessonRes.data;
+        const matsData = matsRes.data ?? [];
 
         if (lessonData) {
           contextTitle = lessonData.title || contextTitle;
           contextDescription = lessonData.description || "";
           contextTranscript = lessonData.transcript || "";
           contextPart = lessonData.part || undefined;
-          if (Array.isArray(lessonData.materials)) {
-            contextMaterials = lessonData.materials
-              .map((m: any) => m.name || m.title || "")
+          contextPdfUrl = lessonData.pdf_url || matsData.find((m) => m.file_url?.toLowerCase().includes(".pdf"))?.file_url || undefined;
+          if (matsData.length > 0) {
+            contextMaterials = matsData
+              .map((m) => m.title || "")
               .filter(Boolean)
               .join(", ");
           }
@@ -164,6 +176,7 @@ function GeradorQuestoesIaPage() {
           subject: subject || activeModuleTitle || activeLessonTitle,
           transcript: contextTranscript,
           description: contextDescription,
+          pdfUrl: contextPdfUrl,
           materialsText: contextMaterials,
           part: contextPart,
           banca: banca.trim() ? banca : `Simulado IA — ${activeCourseTitle}`,

@@ -6,6 +6,7 @@ export interface LessonContext {
   part?: string;
   description?: string;
   transcript?: string;
+  pdfUrl?: string;
   pdfText?: string;
   materialsText?: string;
   banca?: string;
