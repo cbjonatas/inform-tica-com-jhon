@@ -42,3 +42,12 @@ export interface TranscriptionResult {
   transcript: string;
   timestamps: Array<{ time: number; label: string; text: string }>;
 }
+
+export interface FlashcardItem {
+  id: string;
+  front: string;
+  back: string;
+  excerpt?: string;
+  category?: string;
+}
+

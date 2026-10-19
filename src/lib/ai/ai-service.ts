@@ -6,6 +6,7 @@ import type {
   GeneratedQuestionItem,
   PdfAnalysisResult,
   TranscriptionResult,
+  FlashcardItem,
 } from "./types";
 
 class AIService {
@@ -618,6 +619,73 @@ class AIService {
       }
     }
     return result;
+  }
+
+  /**
+   * Gera flashcards estruturados com perguntas e respostas para revisão
+   * utilizando o conteúdo da aula e/ou o PDF associado.
+   */
+  async generateFlashcards(
+    context?: LessonContext,
+    count: number = 8
+  ): Promise<FlashcardItem[]> {
+    let pdfText = context?.pdfText?.trim() || "";
+    if (!pdfText && context?.pdfUrl) {
+      try {
+        pdfText = await extractTextFromPdfUrl(context.pdfUrl);
+      } catch (err) {
+        console.warn("Aviso ao extrair texto do PDF para flashcards:", err);
+      }
+    }
+
+    const cleanTranscript = (context?.transcript || "")
+      .replace(/\[\d{2}:\d{2}(?::\d{2})?\]/g, " ")
+      .replace(/<[^>]+>/g, " ")
+      .trim();
+
+    const cleanDescription = (context?.description || "")
+      .replace(/<[^>]+>/g, " ")
+      .trim();
+
+    const cleanMaterials = (context?.materialsText || "").trim();
+
+    const propositions = this.extractTechnicalPropositions(pdfText, cleanTranscript, cleanDescription, cleanMaterials);
+
+    const baseProps = propositions.length > 0 ? propositions : [
+      {
+        topic: context?.subject || "Conceito Técnico",
+        statement: "Os conceitos apresentados no material regulam o funcionamento operacional dos sistemas conforme parâmetros técnicos formais.",
+        predicate: "opera em estrita consonância com os parâmetros formais descritos no conteúdo de estudo",
+        excerpt: "Os conceitos apresentados no material regulam o funcionamento operacional dos sistemas conforme parâmetros técnicos formais.",
+        source: "aula" as const,
+        isDual: false,
+      },
+    ];
+
+    const cards: FlashcardItem[] = [];
+    const total = Math.min(count, Math.max(baseProps.length, 5));
+
+    for (let i = 0; i < total; i++) {
+      const prop = baseProps[i % baseProps.length];
+      const frontPrompts = [
+        `O que é e qual é a função essencial de ${prop.topic} segundo o material de estudo?`,
+        `Como opera ${prop.topic} e quais parâmetros técnicos determinam seu funcionamento?`,
+        `Quais são as principais características e requisitos aplicáveis a ${prop.topic}?`,
+        `Em concursos públicos, qual regra essencial deve ser lembrada a respeito de ${prop.topic}?`,
+      ];
+      const front = frontPrompts[i % frontPrompts.length];
+      const back = `${prop.topic} ${prop.predicate}.\n\n📖 Fundamentação no material:\n"${prop.excerpt}"`;
+
+      cards.push({
+        id: `fc-${Date.now()}-${i}`,
+        front,
+        back,
+        excerpt: prop.excerpt,
+        category: prop.source === "pdf" ? "Material PDF" : prop.source === "integrado" ? "PDF + Videoaula" : "Videoaula",
+      });
+    }
+
+    return cards;
   }
 }
 

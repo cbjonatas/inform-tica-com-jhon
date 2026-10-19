@@ -178,6 +178,14 @@ export async function extractTextFromPdfBuffer(buffer: ArrayBuffer): Promise<str
       }
     }
 
+    if (pieces.length === 0) {
+      // Fallback para PDFs com texto direto no documento
+      const fallbackPieces = extractTextFromStream(latin1String);
+      if (fallbackPieces.length > 0) {
+        pieces.push(...fallbackPieces);
+      }
+    }
+
     const fullText = pieces.join(" ").replace(/\s+/g, " ").trim();
     return fullText;
   } catch (err) {

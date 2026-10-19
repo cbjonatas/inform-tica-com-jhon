@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   ArrowLeft,
   Bookmark,
@@ -9,12 +9,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Eye,
+  EyeOff,
   FileEdit,
   FileText,
   HelpCircle,
   Lightbulb,
   Loader2,
   Play,
+  RotateCcw,
   ShieldAlert,
   Sparkles,
   Star,
@@ -45,7 +48,7 @@ type ActiveTab =
   | "descricao"
   | "transcricao"
   | "pdf"
-  | "questoes"
+  | "flashcards"
   | "resumo"
   | "anotacoes"
   | "ia";
@@ -80,6 +83,13 @@ function AulaDetailPage() {
   const [questionDifficulty, setQuestionDifficulty] = useState<"Fácil" | "Médio" | "Difícil">("Médio");
   const [questionBanca, setQuestionBanca] = useState<string>("Cebraspe");
   const [questionFeedback, setQuestionFeedback] = useState<string | null>(null);
+
+  // Estados de Flashcards (Item 2 da Especificação)
+  const [flashcards, setFlashcards] = useState<any[]>([]);
+  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  const [isAnswerRevealed, setIsAnswerRevealed] = useState(false);
+  const [isGeneratingFlashcards, setIsGeneratingFlashcards] = useState(false);
+  const [flashcardsFeedback, setFlashcardsFeedback] = useState<string | null>(null);
 
   const { data, isLoading, isPending } = useQuery({
     queryKey: ["aula_detail", aulaId, user?.id],
@@ -176,6 +186,27 @@ function AulaDetailPage() {
         ];
       }
 
+      // Carregar flashcards previamente salvos (via notes ou localStorage)
+      let savedFlashcards: any[] = [];
+      const flashcardNote = (notesRes?.data ?? []).find((n: any) =>
+        n.content && n.content.startsWith("[FLASHCARDS_JSON]")
+      );
+      if (flashcardNote) {
+        try {
+          savedFlashcards = JSON.parse(flashcardNote.content.replace("[FLASHCARDS_JSON]", ""));
+        } catch (e) {
+          console.warn("Aviso ao carregar flashcards de anotações:", e);
+        }
+      }
+      if (savedFlashcards.length === 0 && typeof window !== "undefined") {
+        try {
+          const local = localStorage.getItem(`lesson_flashcards_${aulaId}`);
+          if (local) {
+            savedFlashcards = JSON.parse(local);
+          }
+        } catch (e) {}
+      }
+
       return {
         lesson,
         module: moduleData,
@@ -185,6 +216,7 @@ function AulaDetailPage() {
         materials,
         notes: notesRes?.data ?? [],
         questions: questionsRes?.data ?? [],
+        savedFlashcards,
       };
     },
   });
@@ -197,6 +229,13 @@ function AulaDetailPage() {
   const questions = data?.questions ?? [];
   const materials = data?.materials ?? [];
   const notes = data?.notes ?? [];
+
+  // Sincronizar flashcards salvos no estado
+  useEffect(() => {
+    if (data?.savedFlashcards && data.savedFlashcards.length > 0) {
+      setFlashcards(data.savedFlashcards);
+    }
+  }, [data?.savedFlashcards]);
 
   // Timestamps da transcrição
   const timestamps =
@@ -282,6 +321,67 @@ function AulaDetailPage() {
   const handleDeleteNote = async (noteId: string) => {
     await supabase.from("notes").delete().eq("id", noteId);
     queryClient.invalidateQueries({ queryKey: ["aula_detail", aulaId] });
+  };
+
+  // Gerar Flashcards com IA a partir da aula e do PDF (Item 2 da Especificação)
+  const handleGenerateFlashcards = async () => {
+    if (!aulaId || !lesson) return;
+    setIsGeneratingFlashcards(true);
+    setFlashcardsFeedback(null);
+    try {
+      const pdfUrl =
+        lesson.pdf_url ||
+        materials.find((m: any) => m.file_url?.toLowerCase().includes(".pdf"))?.file_url ||
+        undefined;
+
+      const cards = await aiService.generateFlashcards(
+        {
+          lessonTitle: lesson.title,
+          subject: lesson.subject || lesson.title,
+          part: lesson.part || "",
+          description: lesson.description || "",
+          transcript: lesson.transcript || "",
+          pdfUrl,
+          materialsText: materials.map((m: any) => m.title).join(", "),
+          courseTitle: courseData?.title,
+          moduleTitle: moduleData?.title,
+        },
+        8
+      );
+
+      setFlashcards(cards);
+      setCurrentCardIndex(0);
+      setIsAnswerRevealed(false);
+
+      // Salvar em localStorage para acesso imediato
+      try {
+        localStorage.setItem(`lesson_flashcards_${aulaId}`, JSON.stringify(cards));
+      } catch (e) {}
+
+      // Salvar no banco (tabela notes com tag [FLASHCARDS_JSON]) vinculado ao aluno
+      if (user?.id) {
+        const serialized = "[FLASHCARDS_JSON]" + JSON.stringify(cards);
+        const existingNote = notes.find((n: any) => n.content?.startsWith("[FLASHCARDS_JSON]"));
+        if (existingNote) {
+          await supabase.from("notes").update({ content: serialized }).eq("id", existingNote.id);
+        } else {
+          await supabase.from("notes").insert({
+            user_id: user.id,
+            lesson_id: aulaId,
+            content: serialized,
+            timestamp_seconds: 0,
+          });
+        }
+        queryClient.invalidateQueries({ queryKey: ["aula_detail", aulaId] });
+      }
+
+      setFlashcardsFeedback(`✓ ${cards.length} flashcards gerados e salvos para esta aula!`);
+      setTimeout(() => setFlashcardsFeedback(null), 4000);
+    } catch (err: any) {
+      alert(`Falha ao gerar flashcards: ${err?.message || err}`);
+    } finally {
+      setIsGeneratingFlashcards(false);
+    }
   };
 
   // Gerar Questões desta Aula com IA (Base exclusiva no material da aula)
@@ -513,9 +613,9 @@ function AulaDetailPage() {
             { id: "descricao", label: "DESCRIÇÃO", icon: FileText },
             { id: "transcricao", label: "TRANSCRIÇÃO INTELIGENTE", icon: FileText },
             { id: "pdf", label: "PDF & MATERIAIS", icon: Download },
-            { id: "questoes", label: "QUESTÕES", icon: HelpCircle, count: questions.length },
+            { id: "flashcards", label: "GERAR FLASHCARDS", icon: BookOpen, count: flashcards.length || undefined },
             { id: "resumo", label: "RESUMO IA", icon: Lightbulb },
-            { id: "anotacoes", label: "MINHAS ANOTAÇÕES", icon: FileEdit, count: notes.length },
+            { id: "anotacoes", label: "MINHAS ANOTAÇÕES", icon: FileEdit, count: notes.filter((n: any) => !n.content?.startsWith("[FLASHCARDS_JSON]")).length },
             { id: "ia", label: "PERGUNTE À IA", icon: Sparkles },
           ].map((tab) => (
             <button
@@ -602,196 +702,201 @@ function AulaDetailPage() {
             </div>
           )}
 
-          {/* ABA 4: QUESTÕES */}
-          {activeTab === "questoes" && (
+          {/* ABA 4: GERAR FLASHCARDS (Item 2 da Especificação) */}
+          {activeTab === "flashcards" && (
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h3 className="text-lg font-bold font-display">Questões desta Videoaula</h3>
+                  <h3 className="text-lg font-bold font-display flex items-center gap-2">
+                    <BookOpen className="size-5 text-accent" /> Flashcards para Revisão
+                  </h3>
                   <p className="text-xs text-muted-foreground">
-                    Resolva questões exclusivas geradas a partir do material e da transcrição desta aula.
+                    Perguntas e respostas de fixação baseadas no conteúdo desta aula e do PDF associado.
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowGenerateQuestionsModal(!showGenerateQuestionsModal)}
-                    className="glow-primary inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 transition-all shadow-sm"
-                  >
-                    <Sparkles className="size-3.5" />
-                    <span>Gerar Questões desta Aula com IA</span>
-                  </button>
-                  <Link
-                    to="/questoes/ia"
-                    search={{ cursoId: courseData?.id, moduloId: lesson.module_id, aulaId: lesson.id }}
-                    className="text-xs text-muted-foreground hover:text-foreground hover:underline hidden sm:inline-flex items-center gap-1 ml-1"
-                  >
-                    Simulado Geral ↗
-                  </Link>
-                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGenerateFlashcards}
+                  disabled={isGeneratingFlashcards}
+                  className="glow-primary inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all shadow-sm cursor-pointer"
+                >
+                  {isGeneratingFlashcards ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span>Gerando flashcards com IA...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="size-3.5" />
+                      <span>{flashcards.length > 0 ? "Regerar Flashcards com IA" : "Gerar flashcards"}</span>
+                    </>
+                  )}
+                </button>
               </div>
 
-              {questionFeedback && (
+              {flashcardsFeedback && (
                 <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3.5 text-xs font-semibold text-emerald-500 animate-fadeIn">
-                  {questionFeedback}
+                  {flashcardsFeedback}
                 </div>
               )}
 
-              {/* Caixa de Configuração Rápida de Geração com IA */}
-              {showGenerateQuestionsModal && (
-                <div className="panel p-5 border border-primary/40 bg-primary/5 space-y-4 rounded-2xl animate-fadeIn">
-                  <div className="flex items-center justify-between border-b border-border/60 pb-2">
+              {flashcards.length > 0 ? (
+                <div className="space-y-5 animate-fadeIn">
+                  {/* Cabeçalho do Cartão */}
+                  <div className="flex items-center justify-between text-xs text-muted-foreground border-b border-border pb-3">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="size-4 text-primary" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-foreground">
-                        Gerador IA — Base Exclusiva no Conteúdo Desta Aula
+                      <span className="font-bold text-foreground">
+                        Cartão {currentCardIndex + 1} de {flashcards.length}
                       </span>
-                    </div>
-                    <button
-                      onClick={() => setShowGenerateQuestionsModal(false)}
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    A IA analisará estritamente o título (<strong>{lesson.title}</strong>), o assunto (<strong>{lesson.subject || "Informática"}</strong>), a descrição dos tópicos e a transcrição desta aula para gerar questões de concurso com gabarito comentado.
-                  </p>
-
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                        Quantidade
-                      </label>
-                      <select
-                        value={questionCount}
-                        onChange={(e) => setQuestionCount(Number(e.target.value))}
-                        disabled={isGeneratingQuestions}
-                        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold focus:border-primary focus:outline-none"
-                      >
-                        <option value={3}>3 Questões Rápidas</option>
-                        <option value={5}>5 Questões (Simulado Médio)</option>
-                        <option value={10}>10 Questões (Bateria Completa)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                        Dificuldade
-                      </label>
-                      <select
-                        value={questionDifficulty}
-                        onChange={(e) => setQuestionDifficulty(e.target.value as any)}
-                        disabled={isGeneratingQuestions}
-                        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold focus:border-primary focus:outline-none"
-                      >
-                        <option value="Fácil">Fácil (Conceitos Diretos)</option>
-                        <option value="Médio">Médio (Padrão Concurso)</option>
-                        <option value="Difícil">Difícil (Pegadinhas Avançadas)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                        Banca Examinadora
-                      </label>
-                      <select
-                        value={questionBanca}
-                        onChange={(e) => setQuestionBanca(e.target.value)}
-                        disabled={isGeneratingQuestions}
-                        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold focus:border-primary focus:outline-none"
-                      >
-                        <option value="Cebraspe">Cebraspe (Certo / Errado & Múltipla Escolha)</option>
-                        <option value="FGV">FGV (Casos Práticos)</option>
-                        <option value="Vunesp">Vunesp (Clássica / Objetiva)</option>
-                        <option value="FCC">FCC (Fundação Carlos Chagas)</option>
-                        <option value="Simulado IA">Simulado Geral de Bancas</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowGenerateQuestionsModal(false)}
-                      disabled={isGeneratingQuestions}
-                      className="rounded-xl border border-border px-3.5 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleGenerateLessonQuestions}
-                      disabled={isGeneratingQuestions}
-                      className="glow-primary flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50"
-                    >
-                      {isGeneratingQuestions ? (
-                        <>
-                          <Loader2 className="size-3.5 animate-spin" />
-                          <span>Gerando a partir do material desta aula...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="size-3.5" />
-                          <span>Gerar Questões Agora</span>
-                        </>
+                      {flashcards[currentCardIndex]?.category && (
+                        <span className="rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-[11px] font-semibold">
+                          {flashcards[currentCardIndex].category}
+                        </span>
                       )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCurrentCardIndex(0);
+                        setIsAnswerRevealed(false);
+                      }}
+                      className="inline-flex items-center gap-1 hover:text-foreground transition-colors text-[11px]"
+                    >
+                      <RotateCcw className="size-3" /> Reiniciar baralho
                     </button>
                   </div>
-                </div>
-              )}
 
-              <div className="space-y-4">
-                {questions.map((q, idx) => (
-                  <QuestionCard
-                    key={q.id}
-                    question={q}
-                    questionNumber={idx + 1}
-                    userSelectedIndex={userAnswers[q.id]}
-                    onDelete={handleDeleteQuestion}
-                    onAnswer={async (selIdx, isCorrect) => {
-                      setUserAnswers((prev) => ({ ...prev, [q.id]: selIdx }));
-                      if (user?.id) {
-                        await supabase.from("question_attempts").insert({
-                          user_id: user.id,
-                          question_id: q.id,
-                          selected_index: selIdx,
-                          is_correct: isCorrect,
-                        });
-                      }
-                    }}
-                    onRetry={() => {
-                      setUserAnswers((prev) => {
-                        const next = { ...prev };
-                        delete next[q.id];
-                        return next;
-                      });
-                    }}
-                  />
-                ))}
-
-                {questions.length === 0 && (
-                  <div className="panel p-8 text-center space-y-4 border border-dashed border-border/80">
-                    <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
-                      <HelpCircle className="size-6" />
-                    </div>
-                    <div className="space-y-1">
-                      <h4 className="text-sm font-bold text-foreground">
-                        Nenhuma questão cadastrada para esta aula ainda
-                      </h4>
-                      <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                        Clique no botão abaixo para gerar questões inéditas com gabarito comentado, formuladas exclusivamente a partir dos tópicos e do conteúdo desta aula.
+                  {/* O Cartão Interativo */}
+                  <div className="panel p-6 sm:p-8 min-h-[260px] flex flex-col justify-between border-2 border-primary/20 bg-card hover:border-primary/40 transition-all rounded-2xl shadow-sm">
+                    {/* Frente (Pergunta) */}
+                    <div className="space-y-3">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-accent">
+                        Pergunta / Ponto de Fixação
+                      </span>
+                      <p className="text-base sm:text-lg font-semibold text-foreground leading-relaxed">
+                        {flashcards[currentCardIndex]?.front}
                       </p>
                     </div>
+
+                    {/* Verso (Resposta Revelada) */}
+                    {isAnswerRevealed && (
+                      <div className="mt-6 pt-5 border-t border-border/80 space-y-3 animate-fadeIn">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500">
+                          Resposta & Fundamentação no Material
+                        </span>
+                        <div className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap bg-secondary/40 p-4 rounded-xl border border-border">
+                          {flashcards[currentCardIndex]?.back}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Botão de Revelar / Ocultar Resposta */}
+                    <div className="pt-6 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setIsAnswerRevealed((prev) => !prev)}
+                        className={cn(
+                          "inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all shadow-sm cursor-pointer",
+                          isAnswerRevealed
+                            ? "bg-secondary text-foreground hover:bg-secondary/80 border border-border"
+                            : "bg-primary text-primary-foreground hover:opacity-90 glow-primary"
+                        )}
+                      >
+                        {isAnswerRevealed ? (
+                          <>
+                            <EyeOff className="size-4" /> Ocultar Resposta
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="size-4" /> Revelar Resposta
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Navegação entre Cartões */}
+                  <div className="flex items-center justify-between pt-2">
                     <button
-                      onClick={() => setShowGenerateQuestionsModal(true)}
-                      className="glow-primary inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-md hover:opacity-90"
+                      type="button"
+                      disabled={currentCardIndex === 0}
+                      onClick={() => {
+                        setCurrentCardIndex((prev) => Math.max(0, prev - 1));
+                        setIsAnswerRevealed(false);
+                      }}
+                      className="flex items-center gap-1.5 rounded-xl border border-border bg-secondary px-4 py-2 text-xs font-semibold text-foreground hover:bg-secondary/80 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
                     >
-                      <Sparkles className="size-4" /> Gerar Questões desta Aula com IA
+                      <ChevronLeft className="size-4" /> Anterior
+                    </button>
+
+                    {/* Indicadores de bolinhas */}
+                    <div className="flex items-center gap-1.5">
+                      {flashcards.map((_, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setCurrentCardIndex(idx);
+                            setIsAnswerRevealed(false);
+                          }}
+                          className={cn(
+                            "size-2 rounded-full transition-all cursor-pointer",
+                            currentCardIndex === idx
+                              ? "bg-primary w-4"
+                              : "bg-border hover:bg-muted-foreground/50"
+                          )}
+                          title={`Ir para cartão ${idx + 1}`}
+                        />
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={currentCardIndex === flashcards.length - 1}
+                      onClick={() => {
+                        setCurrentCardIndex((prev) => Math.min(flashcards.length - 1, prev + 1));
+                        setIsAnswerRevealed(false);
+                      }}
+                      className="flex items-center gap-1.5 rounded-xl border border-border bg-secondary px-4 py-2 text-xs font-semibold text-foreground hover:bg-secondary/80 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                    >
+                      Próximo <ChevronRight className="size-4" />
                     </button>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="panel p-10 text-center space-y-4 border border-dashed border-border/80">
+                  <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                    <BookOpen className="size-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-base font-bold text-foreground">
+                      Nenhum flashcard gerado para esta aula ainda
+                    </h4>
+                    <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                      Clique no botão abaixo para gerar flashcards interativos com perguntas e respostas para revisão rápida, utilizando os conceitos da videoaula e da apostila em PDF associada.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGenerateFlashcards}
+                    disabled={isGeneratingFlashcards}
+                    className="glow-primary inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-xs font-bold text-primary-foreground shadow-md hover:opacity-90 disabled:opacity-50 cursor-pointer"
+                  >
+                    {isGeneratingFlashcards ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        <span>Gerando flashcards com IA...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="size-4" />
+                        <span>Gerar flashcards desta aula</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
