@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { extractTextFromPdfUrl } from "./pdf-extractor";
+import { cleanAndNormalizeText, extractTextFromPdfUrl } from "./pdf-extractor";
 import type {
   LessonContext,
   GeneratedSummaryResult,
@@ -159,46 +159,48 @@ class AIService {
         console.warn("Aviso ao extrair texto do PDF:", err);
       }
     }
+    pdfText = cleanAndNormalizeText(pdfText);
 
-    const cleanTranscript = (context?.transcript || "")
-      .replace(/\[\d{2}:\d{2}(?::\d{2})?\]/g, " ")
-      .replace(/<[^>]+>/g, " ")
-      .trim();
+    const cleanTranscript = cleanAndNormalizeText(
+      (context?.transcript || "")
+        .replace(/\[\d{2}:\d{2}(?::\d{2})?\]/g, " ")
+        .replace(/<[^>]+>/g, " ")
+    );
 
-    const cleanDescription = (context?.description || "")
-      .replace(/<[^>]+>/g, " ")
-      .trim();
+    const cleanDescription = cleanAndNormalizeText(
+      (context?.description || "").replace(/<[^>]+>/g, " ")
+    );
 
-    const cleanMaterials = (context?.materialsText || "").trim();
+    const cleanMaterials = cleanAndNormalizeText(context?.materialsText || "");
     const banca = context?.banca?.trim() || "Cebraspe";
 
     // 2. Extração de proposições técnicas a partir do corpus real (sem usar título como conteúdo)
     const propositions = this.extractTechnicalPropositions(pdfText, cleanTranscript, cleanDescription, cleanMaterials);
 
     // Fallback de contingência caso os textos fornecidos sejam extremamente curtos
-    const fallbackTopic = context?.subject?.trim() || "Conceito Técnico";
+    const fallbackTopic = cleanAndNormalizeText(context?.subject || context?.lessonTitle || "Conceito Técnico");
     const basePropositions = propositions.length > 0 ? propositions : [
       {
         topic: fallbackTopic,
-        statement: `Os conceitos apresentados no material regulam o funcionamento operacional dos sistemas conforme parâmetros técnicos formais.`,
+        statement: `O tópico ${fallbackTopic} opera em estrita consonância com os parâmetros formais descritos no conteúdo de estudo.`,
         predicate: "opera em estrita consonância com os parâmetros formais descritos no conteúdo de estudo",
-        excerpt: "Os conceitos apresentados no material regulam o funcionamento operacional dos sistemas conforme parâmetros técnicos formais.",
+        excerpt: `Conceitos essenciais de ${fallbackTopic} conforme o material de estudo.`,
         source: "aula" as const,
         isDual: false,
       },
       {
         topic: fallbackTopic,
-        statement: `As diretrizes técnicas do material estabelecem requisitos mandatórios para a integridade dos dados manipulados.`,
+        statement: `As diretrizes técnicas relativas a ${fallbackTopic} estabelecem requisitos mandatórios para a integridade dos dados manipulados.`,
         predicate: "assegura a integridade e a conformidade das operações técnicas executadas",
-        excerpt: "As diretrizes técnicas do material estabelecem requisitos mandatórios para a integridade dos dados manipulados.",
+        excerpt: `Requisitos mandatórios de ${fallbackTopic} para a integridade dos dados.`,
         source: "aula" as const,
         isDual: false,
       },
       {
         topic: fallbackTopic,
-        statement: `Os procedimentos técnicos exigem a observância estrita de regras predefinidas de configuração para evitar falhas ou vulnerabilidades.`,
+        statement: `Os procedimentos técnicos de ${fallbackTopic} exigem a observância de regras predefinidas de configuração para evitar falhas ou vulnerabilidades.`,
         predicate: "exige a observância estrita de regras predefinidas de configuração para assegurar a disponibilidade",
-        excerpt: "Os procedimentos técnicos exigem a observância estrita de regras predefinidas de configuração para evitar falhas ou vulnerabilidades.",
+        excerpt: `Regras de configuração de ${fallbackTopic} para evitar falhas e vulnerabilidades.`,
         source: "aula" as const,
         isDual: false,
       },
@@ -249,11 +251,38 @@ class AIService {
       secondaryPredicate?: string;
     }> = [];
 
-    const splitSentences = (text: string) =>
-      text
-        .split(/(?<=[.!?])\s+|\n{2,}/)
-        .map((s) => s.replace(/\s+/g, " ").trim())
-        .filter((s) => s.length >= 25 && s.length <= 400 && !/^(ol[aá]|bom dia|boa tarde|bem[- ]vindos?|inscreva|clique)/i.test(s));
+    const isValidSentence = (s: string) => {
+      if (!s || s.length < 20 || s.length > 500) return false;
+      const letters = (s.match(/[a-zA-ZÀ-ÿ0-9]/g) || []).length;
+      if (letters / s.length < 0.5) return false;
+      if (/[\x00-\x1F\uFFFD]/.test(s)) return false;
+      if (/^(ol[aá]|bom dia|boa tarde|bem[- ]vindos?|inscreva|clique|página \d|capítulo \d|todos os direitos)/i.test(s)) return false;
+      return true;
+    };
+
+    const splitSentences = (text: string) => {
+      if (!text) return [];
+      const clean = cleanAndNormalizeText(text);
+      // Dividir por quebras de linha ou finais de frase
+      const rawUnits = clean.split(/(?:[\r\n]+|(?<=[.!?])\s+)/);
+      const list: string[] = [];
+
+      for (const unit of rawUnits) {
+        const trimmed = unit.trim().replace(/^[•\-\*–—\d\.\)\s]+/, "").trim();
+        if (trimmed.length < 20) continue;
+
+        if (trimmed.length > 350) {
+          const subs = trimmed.split(/(?<=[.!?])\s+/);
+          for (const sub of subs) {
+            const subT = sub.trim().replace(/^[•\-\*–—\d\.\)\s]+/, "").trim();
+            if (isValidSentence(subT)) list.push(subT);
+          }
+        } else if (isValidSentence(trimmed)) {
+          list.push(trimmed);
+        }
+      }
+      return list;
+    };
 
     const pdfSentences = splitSentences(pdfText);
     const lessonSentences = splitSentences([transcript, description, materialsText].filter(Boolean).join(" \n"));
@@ -261,6 +290,22 @@ class AIService {
     const contrastRegex = /(?:enquanto|ao passo que|diferentemente de|ao contr[aá]rio de)\s+(.+?),\s*(.+)/i;
 
     const parseSentence = (sentence: string, source: "pdf" | "aula") => {
+      // Formato A: Dois pontos (ex: "Memória RAM: memória de acesso aleatório...")
+      const colonMatch = sentence.match(/^([A-ZÀ-Ú0-9][\wÀ-ú0-9_ -]{2,45}):\s*(.{15,})$/i);
+      if (colonMatch) {
+        const topic = cleanAndNormalizeText(colonMatch[1].trim());
+        const predicate = cleanAndNormalizeText(colonMatch[2].trim());
+        return {
+          topic,
+          statement: `${topic}: ${predicate}`,
+          predicate: predicate.replace(/^(?:é|são|consiste em|consistem em)\s+/i, ""),
+          excerpt: sentence,
+          source,
+          isDual: false,
+        };
+      }
+
+      // Formato B: Contraste
       const contrastMatch = sentence.match(contrastRegex);
       if (contrastMatch) {
         const part1 = contrastMatch[1].trim();
@@ -279,43 +324,53 @@ class AIService {
         };
       }
 
-      // Verbos definitivos
-      const defMatch = sentence.match(/^([A-ZÀ-Ú0-9][\wÀ-ú0-9_ -]{2,40}?)\s+(?:é|são|consiste em|consistem em|refere-se a|referem-se a|caracteriza-se por|caracterizam-se por|define-se como|tem como função|tem a finalidade de|opera como)\s+(.+)$/i);
+      // Preâmbulo introdutório
+      const strippedSentence = sentence.replace(
+        /^(?:Em\s+[^,.:;]+|No\s+[^,.:;]+|Na\s+[^,.:;]+|Nos\s+[^,.:;]+|Nas\s+[^,.:;]+|De acordo com[^,.:;]+|Segundo[^,.:;]+|Conforme[^,.:;]+|Por sua vez|Além disso|Ademais|Vale destacar que|Importante notar que|Nota-se que),\s*/i,
+        ""
+      );
+
+      // Formato C: Verbos definitivos
+      const defMatch = (strippedSentence || sentence).match(
+        /^([A-ZÀ-Ú0-9][\wÀ-ú0-9_ -]{2,45}?)\s+(?:é|são|consiste em|consistem em|refere-se a|referem-se a|caracteriza-se por|caracterizam-se por|define-se como|tem como função|tem a finalidade de|opera como|atua como|funciona como|serve para)\s+(.+)$/i
+      );
       if (defMatch) {
         return {
-          topic: defMatch[1].trim(),
+          topic: cleanAndNormalizeText(defMatch[1].trim()),
           statement: sentence,
-          predicate: defMatch[2].trim(),
+          predicate: cleanAndNormalizeText(defMatch[2].trim()),
           excerpt: sentence,
           source,
           isDual: false,
         };
       }
 
-      // Verbos operacionais
-      const opMatch = sentence.match(/^([A-ZÀ-Ú0-9][\wÀ-ú0-9_ -]{2,40}?)\s+(?:permite|permitem|impede|impedem|deve|devem|executa|executam|armazena|armazenam|processa|processam|transmite|transmitem|garante|garantem|assegura|asseguram)\s+(.+)$/i);
+      // Formato D: Verbos operacionais
+      const opMatch = (strippedSentence || sentence).match(
+        /^([A-ZÀ-Ú0-9][\wÀ-ú0-9_ -]{2,45}?)\s+(?:permite|permitem|impede|impedem|deve|devem|executa|executam|armazena|armazenam|processa|processam|transmite|transmitem|garante|garantem|assegura|asseguram|utiliza|utilizam|divide-se em|classifica-se em)\s+(.+)$/i
+      );
       if (opMatch) {
         return {
-          topic: opMatch[1].trim(),
+          topic: cleanAndNormalizeText(opMatch[1].trim()),
           statement: sentence,
-          predicate: opMatch[2].trim(),
+          predicate: cleanAndNormalizeText(opMatch[2].trim()),
           excerpt: sentence,
           source,
           isDual: false,
         };
       }
 
-      // Sentença técnica geral: isolar primeiras palavras como sujeito/tópico
-      const words = sentence.split(" ");
-      const headCount = Math.min(4, Math.max(1, words.length - 2));
-      const topicCandidate = words.slice(0, headCount).join(" ").replace(/[,;:]$/, "");
-      const predicateCandidate = words.slice(headCount).join(" ");
+      // Formato E: Sentença técnica geral - isolar primeiras palavras como sujeito/tópico
+      const words = sentence.split(/\s+/);
+      const headCount = Math.min(4, Math.max(1, words.length - 3));
+      const topicCandidate = cleanAndNormalizeText(words.slice(0, headCount).join(" ").replace(/[,;:]$/, ""));
+      const predicateCandidate = cleanAndNormalizeText(words.slice(headCount).join(" "));
 
       return {
         topic: topicCandidate,
-        statement: sentence,
+        statement: cleanAndNormalizeText(sentence),
         predicate: predicateCandidate,
-        excerpt: sentence,
+        excerpt: cleanAndNormalizeText(sentence),
         source,
         isDual: false,
       };
@@ -323,15 +378,21 @@ class AIService {
 
     // 1. Sentenças do PDF
     for (const s of pdfSentences) {
-      propositions.push(parseSentence(s, "pdf"));
+      const p = parseSentence(s, "pdf");
+      if (p.topic && p.topic.length >= 3 && p.predicate && p.predicate.length >= 10) {
+        propositions.push(p);
+      }
     }
 
-    // 2. Sentenças da Aula (Transcrição/Descrição)
+    // 2. Sentenças da Aula
     for (const s of lessonSentences) {
-      propositions.push(parseSentence(s, "aula"));
+      const p = parseSentence(s, "aula");
+      if (p.topic && p.topic.length >= 3 && p.predicate && p.predicate.length >= 10) {
+        propositions.push(p);
+      }
     }
 
-    // 3. Relacionamento PDF + Aula: cruzar conceitos presentes em ambos
+    // 3. Cruzamento PDF + Aula
     if (pdfSentences.length > 0 && lessonSentences.length > 0) {
       for (const pProp of propositions.filter((p) => p.source === "pdf")) {
         const matchingLesson = propositions.find(
@@ -361,7 +422,7 @@ class AIService {
 
   private extractTopicFromClause(clause: string): string {
     const m = clause.match(/^(?:o|a|os|as|um|uma|no|na|nos|nas)?\s*([A-ZÀ-Ú0-9][\wÀ-ú0-9_ -]{2,35})/i);
-    return m ? m[1].trim() : clause.split(" ").slice(0, 3).join(" ");
+    return cleanAndNormalizeText(m ? m[1].trim() : clause.split(" ").slice(0, 3).join(" "));
   }
 
   /**
@@ -439,13 +500,13 @@ class AIService {
     const explanation = `Gabarito Comentado (Padrão ${banca} - Letra ${correctLetter}): Conforme fundamentado no material de estudo: "${prop.excerpt}". A assertiva ${correctLetter} reproduz com exatidão a regra técnica. Os demais itens contêm as clássicas armadilhas da banca Cebraspe, como o uso de qualificadores absolutos ("exclusivamente", "vedada"), a inversão de propriedades e a confusão deliberada entre premissas do próprio texto.`;
 
     return {
-      statement,
+      statement: cleanAndNormalizeText(statement),
       options,
       correct_index: correctIndex,
-      explanation,
+      explanation: cleanAndNormalizeText(explanation),
       banca,
       difficulty,
-      subject: prop.topic,
+      subject: cleanAndNormalizeText(prop.topic),
     };
   }
 
@@ -481,13 +542,13 @@ class AIService {
     const explanation = `Gabarito Comentado (Padrão FGV - Letra ${correctLetter}): A situação prática é solucionada pela aplicação direta do preceito técnico extraído do material: "${prop.excerpt}". Diante do cenário apresentado, o parecer adequado é o indicado na alternativa ${correctLetter}. As demais alternativas trazem diagnósticos equivocados e medidas incompatíveis com a situação fática descrita no material.`;
 
     return {
-      statement,
+      statement: cleanAndNormalizeText(statement),
       options,
       correct_index: correctIndex,
-      explanation,
+      explanation: cleanAndNormalizeText(explanation),
       banca: "FGV",
       difficulty,
-      subject: prop.topic,
+      subject: cleanAndNormalizeText(prop.topic),
     };
   }
 
@@ -523,13 +584,13 @@ class AIService {
     const explanation = `Gabarito Comentado (Padrão Vunesp - Letra ${correctLetter}): Conforme a literalidade do material de estudo: "${prop.excerpt}". A alternativa ${correctLetter} é a única que expressa com precisão a regra técnica examinada, sendo as demais opções incorretas por alteração de termos e conceitos literais.`;
 
     return {
-      statement,
+      statement: cleanAndNormalizeText(statement),
       options,
       correct_index: correctIndex,
-      explanation,
+      explanation: cleanAndNormalizeText(explanation),
       banca: "Vunesp",
       difficulty,
-      subject: prop.topic,
+      subject: cleanAndNormalizeText(prop.topic),
     };
   }
 
@@ -565,13 +626,13 @@ class AIService {
     const explanation = `Gabarito Comentado (Padrão FCC - Letra ${correctLetter}): Analisando as regras técnicas expostas no material de estudo: "${prop.excerpt}". A alternativa ${correctLetter} expressa exatamente a especificação correta. As demais alternativas apresentam desvios normativos e inversões conceituais em desacordo com as definições ensinadas.`;
 
     return {
-      statement,
+      statement: cleanAndNormalizeText(statement),
       options,
       correct_index: correctIndex,
-      explanation,
+      explanation: cleanAndNormalizeText(explanation),
       banca: "FCC",
       difficulty,
-      subject: prop.topic,
+      subject: cleanAndNormalizeText(prop.topic),
     };
   }
 
@@ -609,12 +670,14 @@ class AIService {
    */
   private assembleShuffledOptions(correctText: string, distractors: string[], targetIndex: number): string[] {
     const result: string[] = new Array(5);
-    result[targetIndex] = correctText;
+    result[targetIndex] = cleanAndNormalizeText(correctText);
 
     let distractorIdx = 0;
     for (let i = 0; i < 5; i++) {
       if (i !== targetIndex) {
-        result[i] = distractors[distractorIdx] || `Alternativa incorreta com distorção técnica dos preceitos do material.`;
+        result[i] = cleanAndNormalizeText(
+          distractors[distractorIdx] || `Alternativa incorreta com distorção técnica dos preceitos do material.`
+        );
         distractorIdx++;
       }
     }
@@ -624,6 +687,7 @@ class AIService {
   /**
    * Gera flashcards estruturados com perguntas e respostas para revisão
    * utilizando o conteúdo da aula e/ou o PDF associado.
+   * Garante caracteres 100% legíveis sem mojibake ou códigos binários.
    */
   async generateFlashcards(
     context?: LessonContext,
@@ -637,26 +701,29 @@ class AIService {
         console.warn("Aviso ao extrair texto do PDF para flashcards:", err);
       }
     }
+    pdfText = cleanAndNormalizeText(pdfText);
 
-    const cleanTranscript = (context?.transcript || "")
-      .replace(/\[\d{2}:\d{2}(?::\d{2})?\]/g, " ")
-      .replace(/<[^>]+>/g, " ")
-      .trim();
+    const cleanTranscript = cleanAndNormalizeText(
+      (context?.transcript || "")
+        .replace(/\[\d{2}:\d{2}(?::\d{2})?\]/g, " ")
+        .replace(/<[^>]+>/g, " ")
+    );
 
-    const cleanDescription = (context?.description || "")
-      .replace(/<[^>]+>/g, " ")
-      .trim();
+    const cleanDescription = cleanAndNormalizeText(
+      (context?.description || "").replace(/<[^>]+>/g, " ")
+    );
 
-    const cleanMaterials = (context?.materialsText || "").trim();
+    const cleanMaterials = cleanAndNormalizeText(context?.materialsText || "");
 
     const propositions = this.extractTechnicalPropositions(pdfText, cleanTranscript, cleanDescription, cleanMaterials);
 
+    const fallbackTopic = cleanAndNormalizeText(context?.subject || context?.lessonTitle || "Conceito Técnico");
     const baseProps = propositions.length > 0 ? propositions : [
       {
-        topic: context?.subject || "Conceito Técnico",
-        statement: "Os conceitos apresentados no material regulam o funcionamento operacional dos sistemas conforme parâmetros técnicos formais.",
+        topic: fallbackTopic,
+        statement: `O tópico ${fallbackTopic} opera em estrita consonância com os parâmetros formais descritos no conteúdo de estudo.`,
         predicate: "opera em estrita consonância com os parâmetros formais descritos no conteúdo de estudo",
-        excerpt: "Os conceitos apresentados no material regulam o funcionamento operacional dos sistemas conforme parâmetros técnicos formais.",
+        excerpt: `Conceitos essenciais de ${fallbackTopic} conforme o material de estudo.`,
         source: "aula" as const,
         isDual: false,
       },
@@ -667,20 +734,24 @@ class AIService {
 
     for (let i = 0; i < total; i++) {
       const prop = baseProps[i % baseProps.length];
+      const cleanTopic = cleanAndNormalizeText(prop.topic);
+      const cleanStatement = cleanAndNormalizeText(prop.statement);
+      const cleanExcerpt = cleanAndNormalizeText(prop.excerpt);
+
       const frontPrompts = [
-        `O que é e qual é a função essencial de ${prop.topic} segundo o material de estudo?`,
-        `Como opera ${prop.topic} e quais parâmetros técnicos determinam seu funcionamento?`,
-        `Quais são as principais características e requisitos aplicáveis a ${prop.topic}?`,
-        `Em concursos públicos, qual regra essencial deve ser lembrada a respeito de ${prop.topic}?`,
+        `Qual é o conceito essencial e a finalidade de ${cleanTopic} segundo o material de estudo?`,
+        `Como funciona ${cleanTopic} e quais são suas características técnicas fundamentais?`,
+        `O que o candidato deve fixar a respeito de ${cleanTopic} para provas de concurso?`,
+        `Em concursos públicos, quais diretrizes e regras essenciais regem o uso de ${cleanTopic}?`,
       ];
       const front = frontPrompts[i % frontPrompts.length];
-      const back = `${prop.topic} ${prop.predicate}.\n\n📖 Fundamentação no material:\n"${prop.excerpt}"`;
+      const back = `${cleanStatement}\n\n📖 Fundamentação no material de estudo:\n"${cleanExcerpt}"`;
 
       cards.push({
         id: `fc-${Date.now()}-${i}`,
-        front,
-        back,
-        excerpt: prop.excerpt,
+        front: cleanAndNormalizeText(front),
+        back: cleanAndNormalizeText(back),
+        excerpt: cleanExcerpt,
         category: prop.source === "pdf" ? "Material PDF" : prop.source === "integrado" ? "PDF + Videoaula" : "Videoaula",
       });
     }
