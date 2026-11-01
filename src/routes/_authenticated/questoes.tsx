@@ -1,8 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+﻿import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   AlertTriangle,
+  BookOpen,
   CheckCircle2,
   FileText,
   Filter,
@@ -26,8 +27,8 @@ import { questoesInformatica } from "@/data/questoes-informatica";
 export const Route = createFileRoute("/_authenticated/questoes")({
   head: () => ({
     meta: [
-      { title: "Gerar Questões via PDF — Informática com Jhon" },
-      { name: "description", content: "Envie um arquivo PDF e gere simulados inéditos de concursos (de 1 a 30 questões) fundamentados exclusivamente no material." },
+      { title: "Banco de Questões de Informática — Informática com Jhon" },
+      { name: "description", content: "Pratique com 418 questões reais de concursos públicos em Informática das bancas Cebraspe, FCC, FGV e CESGRANRIO com gabarito comentado." },
     ],
   }),
   component: QuestoesPage,
@@ -51,6 +52,7 @@ function QuestoesPage() {
   const [favoritedIds, setFavoritedIds] = useState<Set<string>>(new Set());
 
   // Estados para Gerar Questões via PDF (Item 1 da Especificação)
+  const [showPdfGenerator, setShowPdfGenerator] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfText, setPdfText] = useState("");
   const [isExtractingPdf, setIsExtractingPdf] = useState(false);
@@ -347,7 +349,76 @@ function QuestoesPage() {
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
-      {/* 1. SEÇÃO PRINCIPAL: GERAR QUESTÕES VIA PDF (Item 1 da Especificação) */}
+      {/* CABEÇALHO DO BANCO DE QUESTÕES */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary tracking-wide uppercase">
+            <BookOpen className="size-3.5" /> BANCO DE QUESTÕES & SIMULADOS
+          </div>
+          <h1 className="mt-2 text-2xl font-bold font-display sm:text-3xl text-foreground">
+            Banco de Questões de Informática
+          </h1>
+          <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
+            Pratique com as {allQuestions.length} questões reais comentadas das principais bancas examinadoras (Cebraspe, CESGRANRIO, FCC, FGV). Acompanhe seu desempenho e revise seus erros.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowPdfGenerator((prev) => !prev)}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all border shrink-0 cursor-pointer shadow-sm",
+            showPdfGenerator || pdfFile || generatedPdfQuestions.length > 0
+              ? "bg-secondary text-foreground border-border hover:bg-secondary/80"
+              : "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+          )}
+        >
+          <Sparkles className="size-4" />
+          <span>{showPdfGenerator || pdfFile || generatedPdfQuestions.length > 0 ? "Ocultar Gerador via PDF" : "✨ Gerar Questões via PDF"}</span>
+        </button>
+      </div>
+
+      {/* CARDS DE MÉTRICAS */}
+      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="panel p-4 border border-border bg-card">
+          <div className="flex items-center justify-between">
+            <p className="font-display text-2xl font-bold text-foreground">{allQuestions.length}</p>
+            <span className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary font-mono">
+              418 REAIS
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">Questões de Informática</p>
+        </div>
+        <div className="panel p-4 border border-border bg-card">
+          <p className="font-display text-2xl font-bold text-foreground">{totalRespondidas}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Tentativas registradas</p>
+        </div>
+        <div className="panel p-4 border border-border bg-card">
+          <div className="flex items-center justify-between">
+            <p className="font-display text-2xl font-bold text-emerald-500">{totalAcertos}</p>
+            {totalRespondidas > 0 && (
+              <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-500 font-mono">
+                {taxaAcerto}%
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">Acertos totais</p>
+        </div>
+        <div className="panel p-4 border border-border bg-card">
+          <div className="flex items-center justify-between">
+            <p className="font-display text-2xl font-bold text-red-500">{wrongQuestionIds.size}</p>
+            {wrongQuestionIds.size > 0 && (
+              <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-bold text-red-500">
+                Revisar
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">Questões a refazer</p>
+        </div>
+      </section>
+
+      {/* SEÇÃO DE GERADOR VIA PDF (EXPANSÍVEL) */}
+      {(showPdfGenerator || pdfFile || generatedPdfQuestions.length > 0) && (
       <section className="panel p-6 sm:p-8 space-y-6 border border-primary/30 bg-primary/[0.02] shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-4">
           <div>
@@ -627,39 +698,18 @@ function QuestoesPage() {
           </div>
         )}
       </section>
+      )}
 
-      {/* 2. SEÇÃO: BANCO GERAL DE QUESTÕES COMENTADAS */}
-      <div className="pt-4 border-t border-border">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.25em] text-accent uppercase">HISTÓRICO & BANCO GERAL</p>
-            <h2 className="mt-1 text-2xl font-bold font-display md:text-3xl">Banco Geral de Questões</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Acesse todas as questões registradas na plataforma e monitore seu desempenho por curso e assunto.
-            </p>
-          </div>
-        </div>
+      {/* Título da Seção de Resolução */}
+      <div className="pt-2">
+        <p className="text-xs font-semibold tracking-[0.25em] text-accent uppercase">QUESTÕES REAIS COMENTADAS</p>
+        <h2 className="mt-1 text-xl font-bold font-display sm:text-2xl text-foreground">
+          Resolva Questões de Concurso
+        </h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Filtre por banca, assunto ou pesquise por palavras-chave para focar nos temas do seu edital.
+        </p>
       </div>
-
-      {/* Cards de Métricas */}
-      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="panel p-4">
-          <p className="font-display text-2xl font-bold">{allQuestions.length}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Questões disponíveis</p>
-        </div>
-        <div className="panel p-4">
-          <p className="font-display text-2xl font-bold">{totalRespondidas}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Tentativas registradas</p>
-        </div>
-        <div className="panel p-4">
-          <p className="font-display text-2xl font-bold text-emerald-500">{totalAcertos}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Acertos totais</p>
-        </div>
-        <div className="panel p-4">
-          <p className="font-display text-2xl font-bold text-red-500">{wrongQuestionIds.size}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Questões a refazer</p>
-        </div>
-      </section>
 
       {/* Seletor de Modo */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">

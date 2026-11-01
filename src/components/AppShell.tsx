@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 const nav = [
   { to: "/dashboard", label: "Início", icon: LayoutDashboard },
   { to: "/meus-cursos", label: "Meus Cursos", icon: BookOpen },
-  { to: "/questoes", label: "Gerar questões via PDF", icon: FileText },
+  { to: "/questoes", label: "Banco de Questões", icon: HelpCircle },
   { to: "/materiais", label: "Materiais PDF", icon: FileText },
   { to: "/favoritos", label: "Meus Favoritos", icon: Star },
   { to: "/ia", label: "IA do Jhon", icon: Sparkles },
