@@ -9,6 +9,7 @@ import {
   HelpCircle,
   Loader2,
   RotateCcw,
+  Search,
   Sparkles,
   Star,
   Upload,
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { QuestionCard } from "@/components/QuestionCard";
 import { aiService } from "@/lib/ai/ai-service";
 import { extractTextFromPdfBuffer } from "@/lib/ai/pdf-extractor";
+import { questoesInformatica } from "@/data/questoes-informatica";
 
 export const Route = createFileRoute("/_authenticated/questoes")({
   head: () => ({
@@ -42,6 +44,9 @@ function QuestoesPage() {
   const [selectedModule, setSelectedModule] = useState<string>("all");
   const [selectedBanca, setSelectedBanca] = useState<string>("all");
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>("all");
+  const [selectedTopic, setSelectedTopic] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [displayLimit, setDisplayLimit] = useState<number>(25);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [favoritedIds, setFavoritedIds] = useState<Set<string>>(new Set());
 
@@ -79,21 +84,44 @@ function QuestoesPage() {
       return {
         courses: coursesRes.data ?? [],
         modules: modulesRes.data ?? [],
-        questions: questionsRes.data ?? [],
-        attempts: attemptsRes.data ?? [],
+        questions: (() => {
+          const dbQuestions = questionsRes.data ?? [];
+          const dbIds = new Set(dbQuestions.map((q) => q.id));
+          return [
+            ...dbQuestions,
+            ...questoesInformatica.filter((q) => !dbIds.has(q.id)),
+          ];
+        })(),
+        attempts: (() => {
+          let localAttempts: any[] = [];
+          try {
+            localAttempts = JSON.parse(localStorage.getItem("local_question_attempts") || "[]");
+          } catch {}
+          return [...(attemptsRes.data ?? []), ...localAttempts];
+        })(),
       };
     },
   });
 
-  const recordAttemptMutation = useMutation({
+    const recordAttemptMutation = useMutation({
     mutationFn: async ({ qId, optIndex, isCorrect }: { qId: string; optIndex: number; isCorrect: boolean }) => {
+      try {
+        const stored = JSON.parse(localStorage.getItem("local_question_attempts") || "[]");
+        stored.unshift({ question_id: qId, selected_index: optIndex, is_correct: isCorrect, created_at: new Date().toISOString() });
+        localStorage.setItem("local_question_attempts", JSON.stringify(stored));
+      } catch {}
+
       if (!user?.id) return;
-      await supabase.from("question_attempts").insert({
-        user_id: user.id,
-        question_id: qId,
-        selected_index: optIndex,
-        is_correct: isCorrect,
-      });
+      try {
+        await supabase.from("question_attempts").insert({
+          user_id: user.id,
+          question_id: qId,
+          selected_index: optIndex,
+          is_correct: isCorrect,
+        });
+      } catch (err) {
+        console.warn("Tentativa gravada localmente:", err);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["questoes_full_page"] });
@@ -274,7 +302,8 @@ function QuestoesPage() {
       .map(([id]) => id)
   );
 
-  const bancas = Array.from(new Set(allQuestions.map((q) => q.banca).filter(Boolean)));
+    const bancas = Array.from(new Set(allQuestions.map((q) => q.banca).filter(Boolean)));
+  const topics = Array.from(new Set(allQuestions.map((q) => q.subtopic).filter(Boolean))).sort();
 
   const availableModules =
     selectedCourse === "all"
@@ -287,7 +316,15 @@ function QuestoesPage() {
     if (selectedCourse !== "all" && q.course_id !== selectedCourse) return false;
     if (selectedModule !== "all" && q.module_id !== selectedModule) return false;
     if (selectedBanca !== "all" && q.banca !== selectedBanca) return false;
-    if (selectedDifficulty !== "all" && (q.difficulty || "medio") !== selectedDifficulty) return false;
+    if (selectedTopic !== "all" && q.subtopic !== selectedTopic) return false;
+    if (selectedDifficulty !== "all" && (q.difficulty || "medio").toLowerCase() !== selectedDifficulty.toLowerCase()) return false;
+    if (searchQuery.trim()) {
+      const term = searchQuery.toLowerCase();
+      const matchesStatement = (q.statement || "").toLowerCase().includes(term);
+      const matchesTopic = (q.subtopic || "").toLowerCase().includes(term);
+      const matchesBanca = (q.banca || "").toLowerCase().includes(term);
+      if (!matchesStatement && !matchesTopic && !matchesBanca) return false;
+    }
     return true;
   });
 
@@ -716,13 +753,39 @@ function QuestoesPage() {
             <option value="dificil">Difícil</option>
           </select>
 
-          {(selectedCourse !== "all" || selectedModule !== "all" || selectedBanca !== "all" || selectedDifficulty !== "all") && (
+          <select
+            value={selectedTopic}
+            onChange={(e) => setSelectedTopic(e.target.value)}
+            className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium focus:border-primary focus:outline-none max-w-xs"
+          >
+            <option value="all">Todos os Assuntos ({topics.length})</option>
+            {topics.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Pesquisar questão (ex: Excel, Linux, Malware, RAM)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-xl border border-border bg-background pl-8 pr-3 py-2 text-xs focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          {(selectedCourse !== "all" || selectedModule !== "all" || selectedBanca !== "all" || selectedDifficulty !== "all" || selectedTopic !== "all" || searchQuery) && (
             <button
               onClick={() => {
                 setSelectedCourse("all");
                 setSelectedModule("all");
                 setSelectedBanca("all");
                 setSelectedDifficulty("all");
+                setSelectedTopic("all");
+                setSearchQuery("");
               }}
               className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground underline transition-colors"
             >
@@ -734,7 +797,7 @@ function QuestoesPage() {
 
       {/* Lista de Questões renderizadas com QuestionCard */}
       <section className="space-y-6">
-        {filteredQuestions.map((q, qIndex) => {
+        {filteredQuestions.slice(0, displayLimit).map((q, qIndex) => {
           const savedAttempt = latestAttemptMap.get(q.id);
           const currentSelectedIndex = selectedAnswers[q.id] ?? savedAttempt?.selected_index;
 
@@ -761,6 +824,17 @@ function QuestoesPage() {
             />
           );
         })}
+
+                {filteredQuestions.length > displayLimit && (
+          <div className="text-center pt-4">
+            <button
+              onClick={() => setDisplayLimit((prev) => prev + 25)}
+              className="px-6 py-2.5 rounded-xl bg-secondary text-foreground text-xs font-bold hover:bg-secondary/80 border border-border shadow-sm transition-all"
+            >
+              Carregar mais questões (Exibindo {Math.min(displayLimit, filteredQuestions.length)} de {filteredQuestions.length})
+            </button>
+          </div>
+        )}
 
         {filteredQuestions.length === 0 && (
           <div className="panel p-12 text-center text-muted-foreground space-y-3">

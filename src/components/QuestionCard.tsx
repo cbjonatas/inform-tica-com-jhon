@@ -114,7 +114,7 @@ export function QuestionCard({
       </div>
 
       {/* Enunciado */}
-      <p className="text-base text-foreground leading-relaxed">{question.statement}</p>
+      <div className="text-base text-foreground leading-relaxed whitespace-pre-line">{question.statement}</div>
 
       {/* Alternativas A a E */}
       <div className="space-y-2.5 pt-2">
