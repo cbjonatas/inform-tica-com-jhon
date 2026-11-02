@@ -1,4 +1,4 @@
-﻿import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -275,7 +275,7 @@ function QuestoesPage() {
         user_id: user.id,
         item_type: "question",
         item_id: q.id,
-        title: q.statement.slice(0, 70) + "...",
+        title: (q.statement.replace(/<[^>]+>/g, "").replace(/!\[.*?\]\(.*?\)/g, "").trim().slice(0, 75) || "Questao de Informatica") + "...",
         subtitle: `${q.banca || "Banca"} ${q.ano || ""}`,
       });
       setFavoritedIds((prev) => {

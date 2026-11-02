@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CheckCircle2, RotateCcw, Star, Trash2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { QuestionContent } from "@/components/QuestionContent";
 
 export interface QuestionData {
   id: string;
@@ -87,7 +88,7 @@ export function QuestionCard({
             <button
               onClick={onToggleFavorite}
               className={cn(
-                "p-1.5 rounded-lg transition-colors",
+                "p-1.5 rounded-lg transition-colors cursor-pointer",
                 isFavorited ? "text-amber-400 bg-amber-400/10" : "text-muted-foreground hover:text-foreground"
               )}
               title={isFavorited ? "Remover dos favoritos" : "Salvar nos favoritos"}
@@ -104,7 +105,7 @@ export function QuestionCard({
                   onDelete(question.id);
                 }
               }}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
               title="Excluir questão da plataforma"
             >
               <Trash2 className="size-4" />
@@ -113,8 +114,11 @@ export function QuestionCard({
         </div>
       </div>
 
-      {/* Enunciado */}
-      <div className="text-base text-foreground leading-relaxed whitespace-pre-line">{question.statement}</div>
+      {/* Enunciado com suporte nativo a Imagens, Tabelas e Formatação */}
+      <QuestionContent
+        content={question.statement}
+        className="text-base text-foreground leading-relaxed"
+      />
 
       {/* Alternativas A a E */}
       <div className="space-y-2.5 pt-2">
@@ -123,14 +127,15 @@ export function QuestionCard({
           const isSelected = selectedIdx === optIndex;
           const isThisCorrect = optIndex === question.correct_index;
 
-          let btnStyle = "border-border bg-secondary/20 hover:bg-secondary/60";
+          let btnStyle = "border-border bg-secondary/20 hover:bg-secondary/60 cursor-pointer";
           if (hasAnswered) {
+            btnStyle = "cursor-default";
             if (isThisCorrect) {
-              btnStyle = "border-emerald-500/50 bg-emerald-500/10 text-emerald-500 font-semibold";
+              btnStyle = "border-emerald-500/50 bg-emerald-500/10 text-emerald-500 font-semibold cursor-default";
             } else if (isSelected) {
-              btnStyle = "border-red-500/50 bg-red-500/10 text-red-500 line-through";
+              btnStyle = "border-red-500/50 bg-red-500/10 text-red-500 line-through cursor-default";
             } else {
-              btnStyle = "opacity-40 border-border";
+              btnStyle = "opacity-40 border-border cursor-default";
             }
           }
 
@@ -147,17 +152,19 @@ export function QuestionCard({
               <span className="grid size-6 shrink-0 place-items-center rounded-full bg-secondary font-mono text-xs font-bold">
                 {letter}
               </span>
-              <span className="flex-1 leading-relaxed">{opt}</span>
+              <div className="flex-1 leading-relaxed">
+                <QuestionContent content={opt} className="text-sm" />
+              </div>
             </button>
           );
         })}
       </div>
 
-      {/* Feedback e Gabarito Comentado (Item 15) */}
+      {/* Feedback e Gabarito Comentado */}
       {hasAnswered && (
         <div
           className={cn(
-            "rounded-xl p-4 text-sm leading-relaxed border space-y-2 mt-4",
+            "rounded-xl p-4 text-sm leading-relaxed border space-y-2 mt-4 animate-fadeIn",
             isCorrect ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"
           )}
         >
@@ -179,7 +186,7 @@ export function QuestionCard({
 
             <button
               onClick={handleRetryInternal}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-semibold"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-semibold cursor-pointer"
             >
               <RotateCcw className="size-3" /> Refazer questão
             </button>
@@ -187,10 +194,13 @@ export function QuestionCard({
 
           {question.explanation && (
             <div className="text-xs md:text-sm text-muted-foreground pt-1.5 border-t border-border/50">
-              <p className="font-semibold text-foreground uppercase text-[10px] tracking-wider mb-0.5">
+              <p className="font-semibold text-foreground uppercase text-[10px] tracking-wider mb-1">
                 COMENTÁRIO DO PROFESSOR / IA:
               </p>
-              <p>{question.explanation}</p>
+              <QuestionContent
+                content={question.explanation}
+                className="text-xs md:text-sm text-foreground/90 leading-relaxed"
+              />
             </div>
           )}
         </div>

@@ -19,6 +19,7 @@ import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { aiService } from "@/lib/ai/ai-service";
+import { QuestionContent } from "@/components/QuestionContent";
 
 export const Route = createFileRoute("/_authenticated/questoes/ia")({
   validateSearch: (search: Record<string, unknown>): { cursoId?: string; moduloId?: string; aulaId?: string } => ({
@@ -527,7 +528,7 @@ function GeradorQuestoesIaPage() {
                     </div>
                   </div>
 
-                  <p className="font-medium text-sm leading-relaxed">{q.statement}</p>
+                  <QuestionContent content={q.statement} className="font-medium text-sm leading-relaxed" />
 
                   <div className="space-y-2">
                     {q.options.map((opt, optIdx) => {
@@ -557,7 +558,7 @@ function GeradorQuestoesIaPage() {
                           <span className="grid size-5 shrink-0 place-items-center rounded-md bg-secondary font-bold text-[11px]">
                             {letter}
                           </span>
-                          <span className="mt-0.5 leading-relaxed">{opt}</span>
+                          <div className="mt-0.5 leading-relaxed flex-1"><QuestionContent content={opt} className="text-xs" /></div>
                         </button>
                       );
                     })}
@@ -576,7 +577,7 @@ function GeradorQuestoesIaPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-muted-foreground leading-relaxed">{q.explanation}</p>
+                      <QuestionContent content={q.explanation} className="text-muted-foreground leading-relaxed text-xs" />
                     </div>
                   )}
                 </div>
