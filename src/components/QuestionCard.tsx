@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { CheckCircle2, RotateCcw, Star, Trash2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { QuestionContent } from "@/components/QuestionContent";
+import { QuestionContent, QuestionImage, normalizeImageUrl } from "@/components/QuestionContent";
 
 export interface QuestionData {
   id: string;
@@ -13,6 +13,13 @@ export interface QuestionData {
   ano?: number;
   difficulty?: string;
   subject?: string;
+  image_url?: string | null;
+  imageUrl?: string | null;
+  image?: string | null;
+  imagem_url?: string | null;
+  imagem?: string | null;
+  figure_url?: string | null;
+  images?: string[] | null;
 }
 
 interface QuestionCardProps {
@@ -56,6 +63,25 @@ export function QuestionCard({
   };
 
   const options = Array.isArray(question.options) ? question.options : [];
+
+  // Coleta imagens especificadas diretamente nos atributos da questão
+  const explicitCandidates = [
+    question.image_url,
+    question.imageUrl,
+    question.image,
+    question.imagem_url,
+    question.imagem,
+    question.figure_url,
+    ...(Array.isArray(question.images) ? question.images : []),
+  ]
+    .filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+    .map((u) => normalizeImageUrl(u));
+
+  // Imagens não presentes no texto para evitar duplicatas
+  const statementLower = (question.statement || "").toLowerCase();
+  const standaloneImages = explicitCandidates.filter(
+    (url, idx, self) => !statementLower.includes(url.toLowerCase()) && self.indexOf(url) === idx
+  );
 
   return (
     <div className={cn("panel p-6 space-y-4 border border-border shadow-sm", className)}>
@@ -119,6 +145,15 @@ export function QuestionCard({
         content={question.statement}
         className="text-base text-foreground leading-relaxed"
       />
+
+      {/* Imagens anexadas diretamente ao registro da questão (se não estiverem no texto do enunciado) */}
+      {standaloneImages.map((imgUrl, i) => (
+        <QuestionImage
+          key={`standalone-img-${i}`}
+          src={imgUrl}
+          alt={question.subject ? `Figura: ${question.subject}` : `Figura da Questão`}
+        />
+      ))}
 
       {/* Alternativas A a E */}
       <div className="space-y-2.5 pt-2">

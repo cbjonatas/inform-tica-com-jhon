@@ -28,7 +28,6 @@ const nav = [
   { to: "/dashboard", label: "Início", icon: LayoutDashboard },
   { to: "/meus-cursos", label: "Meus Cursos", icon: BookOpen },
   { to: "/questoes", label: "Banco de Questões", icon: HelpCircle },
-  { to: "/materiais", label: "Materiais PDF", icon: FileText },
   { to: "/favoritos", label: "Meus Favoritos", icon: Star },
   { to: "/ia", label: "IA do Jhon", icon: Sparkles },
 ];
@@ -433,7 +432,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                           className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-secondary text-xs text-foreground transition-colors"
                         >
                           <HelpCircle className="size-3.5 text-primary shrink-0" />
-                          <span className="truncate">{q.statement}</span>
+                          <span className="truncate">{q.statement.replace(/!\[.*?\]\(.*?\)|<img.*?>/gi, "[Imagem]").replace(/\s+/g, " ").trim()}</span>
                         </Link>
                       ))}
                     </div>

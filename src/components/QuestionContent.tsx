@@ -41,6 +41,68 @@ interface TextBlock {
 type ContentBlock = ImageBlock | TableBlock | HtmlTableBlock | TextBlock;
 
 /**
+ * Normaliza e resolve URLs de imagens, garantindo que caminhos relativos
+ * do Supabase Storage ou uploads locais apontem para a origem correta,
+ * e atualiza URLs HTTP inseguras para HTTPS quando aplicável.
+ */
+export function normalizeImageUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  let clean = url.trim();
+
+  // Remove aspas ou parênteses residuais
+  clean = clean.replace(/^["'(\s]+|["')\s]+$/g, "");
+
+  // Se for HTTP em página HTTPS, atualiza para HTTPS para evitar bloqueio de Mixed Content
+  if (clean.startsWith("http://") && typeof window !== "undefined" && window.location.protocol === "https:") {
+    clean = clean.replace(/^http:\/\//i, "https://");
+  }
+
+  const supabaseUrl = (
+    (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_URL) ||
+    "https://cncopeoelyaqzmdwcknl.supabase.co"
+  ).replace(/\/+$/, "");
+
+  // Caminho relativo de storage do Supabase
+  if (clean.startsWith("/storage/v1/")) {
+    return `${supabaseUrl}${clean}`;
+  }
+  if (clean.startsWith("storage/v1/")) {
+    return `${supabaseUrl}/${clean}`;
+  }
+
+  // Se já for URL absoluta (http, https, data URI)
+  if (clean.startsWith("data:") || clean.startsWith("http://") || clean.startsWith("https://")) {
+    return clean;
+  }
+
+  // Se começar com barra simples (ex: /images/...)
+  if (clean.startsWith("/")) {
+    return clean;
+  }
+
+  // Caso o banco tenha apenas bucket e caminho (ex: questoes/figura1.png ou materiais/...)
+  if (clean.includes("/") && !clean.includes("://")) {
+    return `${supabaseUrl}/storage/v1/object/public/${clean}`;
+  }
+
+  return clean;
+}
+
+/**
+ * Decodifica entidades HTML básicas caso o banco de dados armazene
+ * tags com escape (ex: &lt;img src=&quot;...&quot;&gt;)
+ */
+function decodeHtmlEntities(str: string): string {
+  if (!str) return "";
+  return str
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+/**
  * Normaliza e analisa tabelas em markdown (tanto as padrões em múltiplas linhas
  * quanto as compactadas em linha única que usam "| |" como separador de linhas).
  */
@@ -85,26 +147,36 @@ function parseMarkdownTable(tableText: string): { headers: string[]; rows: strin
  * Divide o conteúdo da questão em blocos sequenciais preservando a ordem exata:
  * Texto -> Imagem -> Texto -> Tabela -> Texto
  */
-function tokenizeContent(content: string): ContentBlock[] {
+export function tokenizeContent(content: string): ContentBlock[] {
   if (!content) return [];
 
+  // Decodifica entidades HTML que possam envolver tags de imagem
+  const decodedContent = decodeHtmlEntities(content);
   const blocks: ContentBlock[] = [];
-  let remaining = content;
+  let remaining = decodedContent;
 
   while (remaining.length > 0) {
-    // 1. Procurar por tag HTML <img> ou Markdown ![alt](src)
+    // 1. Tag HTML <img>
     const imgHtmlRegex = /<img\s+([^>]*?)>/i;
+    // 2. Markdown ![alt](src)
     const imgMdRegex = /!\[([^\]]*)\]\(([^)]+)\)/i;
+    // 3. Tabela HTML
     const htmlTableRegex = /<table[\s\S]*?<\/table>/i;
+    // 4. Tabela Markdown
     const mdTableRegex = /(\|(?:[^\n\r|]+\|)+\r?\n\|(?:\s*:?-+:?\s*\|)+\r?\n(?:\|(?:[^\n\r|]+\|)*(?:\r?\n|$))+)|(\|[\s\S]*?\|\s*\|\s*---[\s\S]*?\|)/i;
+    // 5. URL isolada de imagem (Cloudflare R2, Supabase Storage ou extensões comuns)
+    const imgUrlRegex = /(?:^|\s)(https?:\/\/[^\s<>"']+\.(?:png|jpe?g|gif|webp|svg|bmp)(?:\?[^\s<>"']*)?)(?=$|\s)/i;
+    const r2UrlRegex = /(?:^|\s)(https:\/\/[a-z0-9-]+\.r2\.dev\/questoes\/[^\s<>"']+)(?=$|\s)/i;
 
     const imgHtmlMatch = imgHtmlRegex.exec(remaining);
     const imgMdMatch = imgMdRegex.exec(remaining);
     const htmlTableMatch = htmlTableRegex.exec(remaining);
     const mdTableMatch = mdTableRegex.exec(remaining);
+    const imgUrlMatch = imgUrlRegex.exec(remaining);
+    const r2UrlMatch = r2UrlRegex.exec(remaining);
 
     type MatchCandidate = {
-      type: "img_html" | "img_md" | "html_table" | "md_table";
+      type: "img_html" | "img_md" | "html_table" | "md_table" | "img_url" | "r2_url";
       index: number;
       length: number;
       match: RegExpExecArray;
@@ -123,6 +195,25 @@ function tokenizeContent(content: string): ContentBlock[] {
     }
     if (mdTableMatch) {
       candidates.push({ type: "md_table", index: mdTableMatch.index, length: mdTableMatch[0].length, match: mdTableMatch });
+    }
+    if (imgUrlMatch) {
+      // Ajusta offset caso haja espaço capturado no início
+      const leadingSpace = imgUrlMatch[0].startsWith(" ") ? 1 : 0;
+      candidates.push({
+        type: "img_url",
+        index: imgUrlMatch.index + leadingSpace,
+        length: imgUrlMatch[1].length,
+        match: imgUrlMatch,
+      });
+    }
+    if (r2UrlMatch) {
+      const leadingSpace = r2UrlMatch[0].startsWith(" ") ? 1 : 0;
+      candidates.push({
+        type: "r2_url",
+        index: r2UrlMatch.index + leadingSpace,
+        length: r2UrlMatch[1].length,
+        match: r2UrlMatch,
+      });
     }
 
     if (candidates.length === 0) {
@@ -144,24 +235,36 @@ function tokenizeContent(content: string): ContentBlock[] {
     // Processar o bloco especial
     if (earliest.type === "img_html") {
       const attrsStr = earliest.match[1] || "";
-      const srcMatch = /src=["']([^"']+)["']/i.exec(attrsStr);
-      const altMatch = /alt=["']([^"']*)["']/i.exec(attrsStr);
+      const srcMatch = /src=(?:["']([^"']+)["']|([^\s>]+))/i.exec(attrsStr);
+      const altMatch = /alt=(?:["']([^"']*)["']|([^\s>]+))/i.exec(attrsStr);
+      const rawSrc = srcMatch ? (srcMatch[1] || srcMatch[2]) : "";
 
-      if (srcMatch && srcMatch[1]) {
+      if (rawSrc) {
         blocks.push({
           type: "image",
-          src: srcMatch[1],
-          alt: altMatch ? altMatch[1] : undefined,
+          src: normalizeImageUrl(rawSrc),
+          alt: altMatch ? (altMatch[1] || altMatch[2]) : undefined,
         });
       } else {
-        // Tag inválida, trata como texto
+        // Tag sem src válido, trata como texto
         blocks.push({ type: "text", text: earliest.match[0] });
       }
     } else if (earliest.type === "img_md") {
       const alt = earliest.match[1];
       const src = earliest.match[2];
       if (src) {
-        blocks.push({ type: "image", src, alt });
+        blocks.push({ type: "image", src: normalizeImageUrl(src), alt });
+      } else {
+        blocks.push({ type: "text", text: earliest.match[0] });
+      }
+    } else if (earliest.type === "img_url" || earliest.type === "r2_url") {
+      const rawUrl = earliest.match[1];
+      if (rawUrl) {
+        blocks.push({
+          type: "image",
+          src: normalizeImageUrl(rawUrl),
+          alt: "Imagem da questão",
+        });
       } else {
         blocks.push({ type: "text", text: earliest.match[0] });
       }
@@ -262,7 +365,16 @@ function parseInlineStyles(text: string): React.ReactNode {
 /**
  * Componente de Imagem Interativa com Lightbox / Zoom, alta nitidez e tratamento de erros.
  */
-function QuestionImage({ src, alt, allowZoom = true }: { src: string; alt?: string; allowZoom?: boolean }) {
+export function QuestionImage({
+  src,
+  alt,
+  allowZoom = true,
+}: {
+  src: string;
+  alt?: string;
+  allowZoom?: boolean;
+}) {
+  const normalizedSrc = normalizeImageUrl(src);
   const [isZoomed, setIsZoomed] = useState(false);
   const [zoomScale, setZoomScale] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -293,16 +405,18 @@ function QuestionImage({ src, alt, allowZoom = true }: { src: string; alt?: stri
     };
   }, [isZoomed]);
 
+  if (!normalizedSrc) return null;
+
   if (hasError) {
     return (
       <div className="my-4 flex items-center gap-3 rounded-xl border border-border bg-secondary/30 p-4 text-xs text-muted-foreground">
         <ImageIcon className="size-5 shrink-0 text-muted-foreground" />
         <div className="flex-1 truncate">
           <p className="font-semibold text-foreground">Imagem da questão (anexo)</p>
-          <p className="text-[11px] text-muted-foreground truncate">{src}</p>
+          <p className="text-[11px] text-muted-foreground truncate">{normalizedSrc}</p>
         </div>
         <a
-          href={src}
+          href={normalizedSrc}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-semibold shrink-0"
@@ -328,25 +442,28 @@ function QuestionImage({ src, alt, allowZoom = true }: { src: string; alt?: stri
             }
           }}
         >
+          {/* Skeleton enquanto carrega - sem ocultar o elemento <img> da renderização do navegador */}
           {isLoading && (
-            <div className="flex h-32 w-64 items-center justify-center text-xs text-muted-foreground animate-pulse">
+            <div className="flex h-36 w-64 items-center justify-center text-xs text-muted-foreground animate-pulse rounded-xl bg-secondary/40 mx-auto">
               <Loader2 className="size-4 animate-spin text-primary mr-2" />
               Carregando imagem...
             </div>
           )}
 
           <img
-            src={src}
+            src={normalizedSrc}
             alt={alt || "Imagem da questão"}
-            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            crossOrigin="anonymous"
             onLoad={() => setIsLoading(false)}
             onError={() => {
               setIsLoading(false);
               setHasError(true);
             }}
             className={cn(
-              "max-h-[460px] w-auto max-w-full rounded-xl object-contain transition-transform duration-200 group-hover:scale-[1.01]",
-              isLoading && "hidden"
+              "max-h-[480px] w-auto max-w-full rounded-xl object-contain transition-all duration-300 group-hover:scale-[1.01]",
+              isLoading ? "opacity-0 absolute inset-0 pointer-events-none" : "opacity-100"
             )}
           />
 
@@ -392,8 +509,8 @@ function QuestionImage({ src, alt, allowZoom = true }: { src: string; alt?: stri
           >
             <button
               type="button"
-              onClick={() => setZoomScale((prev) => Math.min(3, prev + 0.25))}
-              className="p-1 rounded hover:bg-white/10 transition-colors"
+              onClick={() => setZoomScale((prev) => Math.min(3.5, prev + 0.25))}
+              className="p-1 rounded hover:bg-white/10 transition-colors cursor-pointer"
               title="Aumentar zoom (+)"
             >
               <ZoomIn className="size-4" />
@@ -404,7 +521,7 @@ function QuestionImage({ src, alt, allowZoom = true }: { src: string; alt?: stri
             <button
               type="button"
               onClick={() => setZoomScale((prev) => Math.max(0.5, prev - 0.25))}
-              className="p-1 rounded hover:bg-white/10 transition-colors"
+              className="p-1 rounded hover:bg-white/10 transition-colors cursor-pointer"
               title="Diminuir zoom (-)"
             >
               <ZoomOut className="size-4" />
@@ -412,17 +529,17 @@ function QuestionImage({ src, alt, allowZoom = true }: { src: string; alt?: stri
             <button
               type="button"
               onClick={() => setZoomScale(1)}
-              className="p-1 rounded hover:bg-white/10 transition-colors text-[11px] font-semibold"
-              title="Redefinir zoom"
+              className="p-1 rounded hover:bg-white/10 transition-colors text-[11px] font-semibold cursor-pointer"
+              title="Redefinir zoom (100%)"
             >
               <RotateCcw className="size-3.5" />
             </button>
             <div className="h-4 w-px bg-zinc-700 mx-1" />
             <a
-              href={src}
+              href={normalizedSrc}
               target="_blank"
               rel="noreferrer"
-              className="p-1 rounded hover:bg-white/10 transition-colors inline-flex items-center gap-1"
+              className="p-1 rounded hover:bg-white/10 transition-colors inline-flex items-center gap-1 cursor-pointer"
               title="Abrir imagem original em nova aba"
             >
               <ExternalLink className="size-3.5" />
@@ -433,7 +550,7 @@ function QuestionImage({ src, alt, allowZoom = true }: { src: string; alt?: stri
                 setIsZoomed(false);
                 setZoomScale(1);
               }}
-              className="p-1 rounded hover:bg-red-500/80 transition-colors text-zinc-300 hover:text-white"
+              className="p-1 rounded hover:bg-red-500/80 transition-colors text-zinc-300 hover:text-white cursor-pointer"
               title="Fechar (Esc)"
             >
               <X className="size-4" />
@@ -442,14 +559,24 @@ function QuestionImage({ src, alt, allowZoom = true }: { src: string; alt?: stri
 
           {/* Imagem Ampliada */}
           <div
-            className="overflow-auto max-h-[88vh] max-w-[92vw] flex items-center justify-center p-4 cursor-default"
+            className="overflow-auto max-h-[88vh] max-w-[92vw] flex items-center justify-center p-4 cursor-default select-none"
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={src}
+              src={normalizedSrc}
+              referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
+              decoding="async"
               alt={alt || "Imagem da questão"}
-              style={{ transform: `scale(${zoomScale})` }}
-              className="transition-transform duration-150 rounded-xl shadow-2xl max-h-[82vh] max-w-[88vw] object-contain bg-white dark:bg-zinc-900 p-2 border border-zinc-700"
+              style={{
+                transform: `scale(${zoomScale})`,
+                transition: "transform 0.15s ease-out",
+                cursor: zoomScale > 1 ? "grab" : "zoom-in",
+              }}
+              onClick={() => {
+                setZoomScale((prev) => (prev === 1 ? 1.75 : 1));
+              }}
+              className="rounded-xl shadow-2xl max-h-[82vh] max-w-[88vw] object-contain bg-white dark:bg-zinc-900 p-2 border border-zinc-700"
             />
           </div>
         </div>
