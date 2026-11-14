@@ -60,11 +60,13 @@ export function NovoCursoPage() {
     setErrorMsg("");
 
     try {
-            let finalCoverUrl = coverUrl.trim();
+      let finalCoverUrl = "";
 
       // Se enviou arquivo de capa, realizar upload com garantia de persistencia e cache-busting
       if (coverFile) {
         finalCoverUrl = await uploadCourseCover(coverFile);
+      } else if (coverUrl && !coverUrl.startsWith("blob:")) {
+        finalCoverUrl = coverUrl.trim();
       }
 
       // Se ainda nao tiver capa, usar capa padrao do sistema

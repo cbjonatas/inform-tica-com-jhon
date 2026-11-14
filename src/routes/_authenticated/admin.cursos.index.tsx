@@ -373,6 +373,7 @@ export function AdminCursosIndexPage() {
                 <div className="relative aspect-[9/13] w-full bg-secondary overflow-hidden">
                   {course.cover_url ? (
                     <img
+                      key={course.cover_url}
                       src={course.cover_url}
                       alt={course.title}
                       className="size-full object-cover"

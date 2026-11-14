@@ -173,14 +173,26 @@ export function AdminCentralPage() {
         throw new Error("O nome do curso é obrigatório.");
       }
 
+      let finalCoverUrl = courseForm.cover_url.trim();
+
+      // Se um novo arquivo binário de imagem foi selecionado, processa e persiste a capa
+      if (courseCoverFile) {
+        finalCoverUrl = await uploadCourseCover(courseCoverFile, editingCourseId || undefined);
+      }
+
+      // Se for novo curso e nenhuma capa foi informada, aplica a capa padrão
+      if (!finalCoverUrl && !editingCourseId) {
+        finalCoverUrl = "/images/capa-padrao.png";
+      }
+
       if (editingCourseId) {
-        // Atualizar
+        // Atualizar curso existente
         const { error } = await supabase
           .from("courses")
           .update({
             title: courseForm.title.trim(),
             description: courseForm.description.trim(),
-            cover_url: courseForm.cover_url.trim() || "/images/capa-padrao.png",
+            cover_url: finalCoverUrl || "/images/capa-padrao.png",
             category: courseForm.category.trim(),
             position: courseForm.position,
             status: courseForm.status,
@@ -188,11 +200,11 @@ export function AdminCentralPage() {
           .eq("id", editingCourseId);
         if (error) throw error;
       } else {
-        // Criar
+        // Criar novo curso
         const { error } = await supabase.from("courses").insert({
           title: courseForm.title.trim(),
           description: courseForm.description.trim(),
-          cover_url: courseForm.cover_url.trim() || "/images/capa-padrao.png",
+          cover_url: finalCoverUrl || "/images/capa-padrao.png",
           category: courseForm.category.trim(),
           position: courseForm.position,
           status: courseForm.status,
@@ -207,6 +219,8 @@ export function AdminCentralPage() {
       toast.success(editingCourseId ? "Curso atualizado com sucesso!" : "Novo curso criado com sucesso!");
       setCourseModalOpen(false);
       setEditingCourseId(null);
+      setCourseCoverFile(null);
+      setCourseCoverPreview("");
     },
     onError: (err: any) => {
       toast.error("Erro ao salvar curso", { description: err.message });
@@ -674,6 +688,7 @@ export function AdminCentralPage() {
                     {/* Capa */}
                     <div className="relative aspect-video w-full bg-secondary overflow-hidden">
                       <img
+                        key={course.cover_url}
                         src={course.cover_url || "/images/capa-padrao.png"}
                         alt={course.title}
                         className="size-full object-cover"
