@@ -29,6 +29,7 @@ export function CourseCard({
       {/* Área da Imagem / Poster Vertical */}
       <div className="relative aspect-[9/13] w-full overflow-hidden bg-zinc-900">
         <img
+          key={finalCover}
           src={finalCover}
           alt={title}
           className="size-full object-cover transition-transform duration-500 group-hover:scale-105"

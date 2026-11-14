@@ -20,6 +20,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, isEmailAdmin } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
+import { UploadArea } from "@/components/UploadArea";
+import { uploadCourseCover } from "@/lib/course-cover-upload";
 
 export const Route = createFileRoute("/_authenticated/admin/cursos/")({
   head: () => ({
@@ -54,6 +56,8 @@ export function AdminCursosIndexPage() {
   // Estados para Edição de Curso
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
+  const [editCoverFile, setEditCoverFile] = useState<File | null>(null);
+  const [editCoverPreview, setEditCoverPreview] = useState<string>("");
   const [editForm, setEditForm] = useState({
     title: "",
     description: "",
@@ -116,15 +120,26 @@ export function AdminCursosIndexPage() {
   });
 
   // Atualizar Curso
-  const updateCourseMutation = useMutation({
+    const updateCourseMutation = useMutation({
     mutationFn: async () => {
       if (!editingCourseId) return;
+      let finalCoverUrl = editForm.cover_url.trim();
+
+      // Se um novo arquivo binario foi anexado, realiza o upload persistente com cache-busting
+      if (editCoverFile) {
+        finalCoverUrl = await uploadCourseCover(editCoverFile, editingCourseId);
+      }
+
+      if (!finalCoverUrl) {
+        finalCoverUrl = "/images/capa-padrao.png";
+      }
+
       const { error } = await supabase
         .from("courses")
         .update({
           title: editForm.title.trim(),
           description: editForm.description.trim(),
-          cover_url: editForm.cover_url.trim(),
+          cover_url: finalCoverUrl,
           category: editForm.category.trim(),
           position: editForm.position,
           status: editForm.status,
@@ -139,6 +154,8 @@ export function AdminCursosIndexPage() {
       queryClient.invalidateQueries({ queryKey: ["meus-cursos"] });
       setEditModalOpen(false);
       setEditingCourseId(null);
+      setEditCoverFile(null);
+      setEditCoverPreview("");
     },
     onError: (err) => {
       alert(`Erro ao salvar alterações no curso: ${err.message}`);
@@ -459,6 +476,8 @@ export function AdminCursosIndexPage() {
                         position: course.position || 1,
                         status: course.status || "published",
                       });
+                      setEditCoverFile(null);
+                      setEditCoverPreview(course.cover_url || "/images/capa-padrao.png");
                       setEditModalOpen(true);
                     }}
                     className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
@@ -555,15 +574,66 @@ export function AdminCursosIndexPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="font-bold text-foreground block mb-1">URL da Imagem de Capa</label>
-                <input
-                  type="text"
-                  value={editForm.cover_url}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, cover_url: e.target.value }))}
-                  placeholder="/images/capa-padrao.png ou URL da imagem"
-                  className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
-                />
+                            <div className="space-y-3">
+                <label className="font-bold text-foreground block">Capa Vertical do Curso (Poster 9:13)</label>
+                
+                <div className="grid gap-4 sm:grid-cols-[1.3fr_1fr] items-start">
+                  <UploadArea
+                    label="Selecionar Nova Capa"
+                    accept="image/*"
+                    maxSizeMB={5}
+                    fileTypeLabel=".jpg, .png, .webp"
+                    selectedFile={editCoverFile}
+                    onFileSelected={(file) => {
+                      setEditCoverFile(file);
+                      if (file) {
+                        const localUrl = URL.createObjectURL(file);
+                        setEditCoverPreview(localUrl);
+                      } else {
+                        setEditCoverPreview(editForm.cover_url || "/images/capa-padrao.png");
+                      }
+                    }}
+                  />
+
+                  <div className="flex flex-col items-center justify-between rounded-xl border border-border bg-secondary/20 p-3">
+                    <p className="text-[11px] font-semibold text-muted-foreground mb-2">Previa da Capa:</p>
+                    <div className="aspect-[9/13] max-h-44 w-auto overflow-hidden rounded-lg border border-border bg-secondary shadow-md">
+                      <img
+                        key={editCoverPreview}
+                        src={editCoverPreview || editForm.cover_url || "/images/capa-padrao.png"}
+                        alt="Previa da capa"
+                        className="size-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "/images/capa-padrao.png";
+                        }}
+                      />
+                    </div>
+                    {editCoverFile && (
+                      <span className="text-[10px] text-emerald-400 font-semibold mt-2">
+                        ✓ Nova imagem selecionada
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-muted-foreground block mb-1">
+                    Ou informe uma URL externa da imagem:
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.cover_url}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEditForm((prev) => ({ ...prev, cover_url: val }));
+                      if (!editCoverFile) {
+                        setEditCoverPreview(val || "/images/capa-padrao.png");
+                      }
+                    }}
+                    placeholder="/images/capa-padrao.png ou link externo"
+                    className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div>

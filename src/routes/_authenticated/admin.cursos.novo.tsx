@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, GraduationCap, Image as ImageIcon, Loader2, Pl
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, isEmailAdmin } from "@/lib/auth";
 import { UploadArea } from "@/components/UploadArea";
+import { uploadCourseCover } from "@/lib/course-cover-upload";
 
 export const Route = createFileRoute("/_authenticated/admin/cursos/novo")({
   head: () => ({
@@ -59,26 +60,14 @@ export function NovoCursoPage() {
     setErrorMsg("");
 
     try {
-      let finalCoverUrl = coverUrl.trim();
+            let finalCoverUrl = coverUrl.trim();
 
-      // Se enviou arquivo de capa, fazer upload para Supabase Storage
+      // Se enviou arquivo de capa, realizar upload com garantia de persistencia e cache-busting
       if (coverFile) {
-        const fileExt = coverFile.name.split(".").pop();
-        const filePath = `capas-cursos/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("materiais")
-          .upload(filePath, coverFile, { upsert: false });
-
-        if (!uploadError) {
-          const { data: publicData } = supabase.storage.from("materiais").getPublicUrl(filePath);
-          if (publicData?.publicUrl) {
-            finalCoverUrl = publicData.publicUrl;
-          }
-        }
+        finalCoverUrl = await uploadCourseCover(coverFile);
       }
 
-      // Se ainda não tiver capa, usar capa padrão do sistema
+      // Se ainda nao tiver capa, usar capa padrao do sistema
       if (!finalCoverUrl) {
         finalCoverUrl = "/images/capa-padrao.png";
       }

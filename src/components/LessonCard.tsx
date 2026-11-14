@@ -64,6 +64,7 @@ export function LessonCard({
       {/* Área da Imagem / Poster Vertical da Aula (aspect-[9/13]) */}
       <div className="relative aspect-[9/13] w-full overflow-hidden bg-zinc-900">
         <img
+          key={finalCover}
           src={finalCover}
           alt={title}
           className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
