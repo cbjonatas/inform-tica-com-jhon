@@ -69,17 +69,12 @@ export function NovoCursoPage() {
         finalCoverUrl = coverUrl.trim();
       }
 
-      // Se ainda nao tiver capa, usar capa padrao do sistema
-      if (!finalCoverUrl) {
-        finalCoverUrl = "/images/capa-padrao.png";
-      }
-
       const { data, error } = await supabase
         .from("courses")
         .insert({
           title: title.trim(),
           description: description.trim(),
-          cover_url: finalCoverUrl,
+          cover_url: finalCoverUrl || "",
           category: category.trim(),
           status,
         })

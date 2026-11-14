@@ -231,10 +231,10 @@ function NovaAulaPage() {
         }
       }
 
-      // Se não enviou capa individual, herdamos a capa do curso selecionado
+      // Se não enviou capa individual, herdamos a capa do curso selecionado (se houver)
       if (!finalCoverUrl) {
         const currentCourse = courses.find((c) => c.id === selectedCourseId);
-        finalCoverUrl = currentCourse?.cover_url || "/images/capa-padrao.png";
+        finalCoverUrl = currentCourse?.cover_url || "";
       }
 
       // 2. Upload da Videoaula (se fornecida via arquivo)
@@ -837,7 +837,7 @@ function NovaAulaPage() {
               {coverUrl || selectedCourse?.cover_url ? (
                 <div className="mt-3 aspect-[9/13] max-h-48 w-auto self-center overflow-hidden rounded-xl border border-border bg-secondary shadow-lg">
                   <img
-                    src={coverUrl || selectedCourse?.cover_url || "/images/capa-padrao.png"}
+                    src={coverUrl || selectedCourse?.cover_url || ""}
                     alt="Preview vertical"
                     className="size-full object-cover"
                   />

@@ -192,14 +192,18 @@ function AdminAulasIndexPage() {
             <div className="flex items-start gap-3.5 min-w-0">
               {/* Thumbnail Vertical da Capa */}
               <div className="relative aspect-[9/13] w-11 sm:w-14 shrink-0 overflow-hidden rounded-lg border border-border bg-secondary shadow-sm">
-                <img
-                  src={aula.cover_url || "/images/capa-padrao.png"}
-                  alt={aula.title}
-                  className="size-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = "/images/capa-padrao.png";
-                  }}
-                />
+                {aula.cover_url ? (
+                  <img
+                    key={aula.cover_url}
+                    src={aula.cover_url}
+                    alt={aula.title}
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <div className="flex size-full items-center justify-center bg-secondary text-[9px] text-muted-foreground">
+                    Sem capa
+                  </div>
+                )}
               </div>
 
               <div className="min-w-0">

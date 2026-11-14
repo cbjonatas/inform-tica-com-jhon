@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Play } from "lucide-react";
+import { GraduationCap, Play } from "lucide-react";
 
 export interface CourseCardProps {
   id: string;
@@ -18,7 +18,7 @@ export function CourseCard({
   lessonsCount = 0,
   pct = 0,
 }: CourseCardProps) {
-  const finalCover = coverUrl && coverUrl.trim().length > 0 ? coverUrl : "/images/capa-padrao.png";
+  const hasCover = Boolean(coverUrl && coverUrl.trim().length > 0);
 
   return (
     <Link
@@ -28,17 +28,20 @@ export function CourseCard({
     >
       {/* Área da Imagem / Poster Vertical */}
       <div className="relative aspect-[9/13] w-full overflow-hidden bg-zinc-900">
-        <img
-          key={finalCover}
-          src={finalCover}
-          alt={title}
-          className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
-          onError={(e) => {
-            // Fallback para o poster local caso a URL falhe
-            (e.target as HTMLImageElement).src = "/images/capa-padrao.png";
-          }}
-          loading="lazy"
-        />
+        {hasCover ? (
+          <img
+            key={coverUrl}
+            src={coverUrl!}
+            alt={title}
+            className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
+            loading="lazy"
+          />
+        ) : (
+          <div className="flex size-full flex-col items-center justify-center bg-gradient-to-br from-zinc-900 via-[#0c0e12] to-zinc-950 p-4 text-center">
+            <GraduationCap className="size-12 text-primary/40 mb-2 transition-transform duration-300 group-hover:scale-110" />
+            <span className="text-xs font-semibold text-zinc-400 line-clamp-2">{title}</span>
+          </div>
+        )}
 
         {/* Gradiente sutil para garantir contraste nos cantos */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30 pointer-events-none" />
@@ -61,22 +64,20 @@ export function CourseCard({
           {title}
         </h3>
 
-        {/* Linha de Progresso: Label e Porcentagem em Azul */}
-        <div className="flex items-center justify-between text-xs">
-          <span className="font-normal text-zinc-400">Progresso</span>
-          <span className="font-bold text-[#2563eb]">{pct}%</span>
-        </div>
-
-        {/* Barra de Progresso Fina */}
-        <div className="h-1 w-full overflow-hidden rounded-full bg-zinc-800/90">
-          <div
-            className="h-full rounded-full bg-[#2563eb] transition-all duration-500"
-            style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-          />
+        {/* Barra de Progresso do Curso */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-[11px] text-zinc-400">
+            <span>Progresso</span>
+            <span className="font-semibold text-white">{pct}%</span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+            <div
+              className="h-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+            />
+          </div>
         </div>
       </div>
     </Link>
   );
 }
-
-export default CourseCard;

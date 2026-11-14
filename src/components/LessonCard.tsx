@@ -24,8 +24,8 @@ export function LessonCard({
   positionSeconds = 0,
   position,
 }: LessonCardProps) {
-  // Determinar a capa vertical (com fallback garantido)
-  const finalCover = coverUrl && coverUrl.trim().length > 0 ? coverUrl : "/images/capa-padrao.png";
+  // Determinar se possui capa personalizada
+  const hasCover = Boolean(coverUrl && coverUrl.trim().length > 0);
 
   // Identificar parte e assunto se não fornecidos explicitamente
   let displaySubject = subject;
@@ -63,16 +63,20 @@ export function LessonCard({
     >
       {/* Área da Imagem / Poster Vertical da Aula (aspect-[9/13]) */}
       <div className="relative aspect-[9/13] w-full overflow-hidden bg-zinc-900">
-        <img
-          key={finalCover}
-          src={finalCover}
-          alt={title}
-          className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = "/images/capa-padrao.png";
-          }}
-          loading="lazy"
-        />
+        {hasCover ? (
+          <img
+            key={coverUrl}
+            src={coverUrl!}
+            alt={title}
+            className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
+            loading="lazy"
+          />
+        ) : (
+          <div className="flex size-full flex-col items-center justify-center bg-gradient-to-br from-zinc-900 via-[#0c0e12] to-zinc-950 p-4 text-center">
+            <Play className="size-10 text-primary/40 mb-2 transition-transform duration-300 group-hover:scale-110" />
+            <span className="text-xs font-semibold text-zinc-400 line-clamp-2">{title}</span>
+          </div>
+        )}
 
         {/* Gradiente cinematográfico */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-black/40 pointer-events-none" />

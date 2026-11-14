@@ -130,16 +130,12 @@ export function AdminCursosIndexPage() {
         finalCoverUrl = await uploadCourseCover(editCoverFile, editingCourseId);
       }
 
-      if (!finalCoverUrl) {
-        finalCoverUrl = "/images/capa-padrao.png";
-      }
-
       const { error } = await supabase
         .from("courses")
         .update({
           title: editForm.title.trim(),
           description: editForm.description.trim(),
-          cover_url: finalCoverUrl,
+          cover_url: finalCoverUrl || "",
           category: editForm.category.trim(),
           position: editForm.position,
           status: editForm.status,
@@ -377,9 +373,6 @@ export function AdminCursosIndexPage() {
                       src={course.cover_url}
                       alt={course.title}
                       className="size-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = "/images/capa-padrao.png";
-                      }}
                       loading="lazy"
                     />
                   ) : (
@@ -478,7 +471,7 @@ export function AdminCursosIndexPage() {
                         status: course.status || "published",
                       });
                       setEditCoverFile(null);
-                      setEditCoverPreview(course.cover_url || "/images/capa-padrao.png");
+                      setEditCoverPreview(course.cover_url || "");
                       setEditModalOpen(true);
                     }}
                     className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
@@ -591,7 +584,7 @@ export function AdminCursosIndexPage() {
                         const localUrl = URL.createObjectURL(file);
                         setEditCoverPreview(localUrl);
                       } else {
-                        setEditCoverPreview(editForm.cover_url || "/images/capa-padrao.png");
+                        setEditCoverPreview(editForm.cover_url || "");
                       }
                     }}
                   />
@@ -599,15 +592,18 @@ export function AdminCursosIndexPage() {
                   <div className="flex flex-col items-center justify-between rounded-xl border border-border bg-secondary/20 p-3">
                     <p className="text-[11px] font-semibold text-muted-foreground mb-2">Previa da Capa:</p>
                     <div className="aspect-[9/13] max-h-44 w-auto overflow-hidden rounded-lg border border-border bg-secondary shadow-md">
-                      <img
-                        key={editCoverPreview}
-                        src={editCoverPreview || editForm.cover_url || "/images/capa-padrao.png"}
-                        alt="Previa da capa"
-                        className="size-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = "/images/capa-padrao.png";
-                        }}
-                      />
+                      {editCoverPreview || editForm.cover_url ? (
+                        <img
+                          key={editCoverPreview || editForm.cover_url}
+                          src={editCoverPreview || editForm.cover_url}
+                          alt="Previa da capa"
+                          className="size-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex size-full items-center justify-center p-3 text-center text-[10px] text-muted-foreground">
+                          Sem capa selecionada
+                        </div>
+                      )}
                     </div>
                     {editCoverFile && (
                       <span className="text-[10px] text-emerald-400 font-semibold mt-2">
@@ -628,10 +624,10 @@ export function AdminCursosIndexPage() {
                       const val = e.target.value;
                       setEditForm((prev) => ({ ...prev, cover_url: val }));
                       if (!editCoverFile) {
-                        setEditCoverPreview(val || "/images/capa-padrao.png");
+                        setEditCoverPreview(val || "");
                       }
                     }}
-                    placeholder="/images/capa-padrao.png ou link externo"
+                    placeholder="URL pública da imagem ou link externo"
                     className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
                   />
                 </div>

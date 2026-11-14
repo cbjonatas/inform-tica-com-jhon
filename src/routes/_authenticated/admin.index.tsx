@@ -180,11 +180,6 @@ export function AdminCentralPage() {
         finalCoverUrl = await uploadCourseCover(courseCoverFile, editingCourseId || undefined);
       }
 
-      // Se for novo curso e nenhuma capa foi informada, aplica a capa padrão
-      if (!finalCoverUrl && !editingCourseId) {
-        finalCoverUrl = "/images/capa-padrao.png";
-      }
-
       if (editingCourseId) {
         // Atualizar curso existente
         const { error } = await supabase
@@ -192,7 +187,7 @@ export function AdminCentralPage() {
           .update({
             title: courseForm.title.trim(),
             description: courseForm.description.trim(),
-            cover_url: finalCoverUrl || "/images/capa-padrao.png",
+            cover_url: finalCoverUrl || "",
             category: courseForm.category.trim(),
             position: courseForm.position,
             status: courseForm.status,
@@ -204,7 +199,7 @@ export function AdminCentralPage() {
         const { error } = await supabase.from("courses").insert({
           title: courseForm.title.trim(),
           description: courseForm.description.trim(),
-          cover_url: finalCoverUrl || "/images/capa-padrao.png",
+          cover_url: finalCoverUrl || "",
           category: courseForm.category.trim(),
           position: courseForm.position,
           status: courseForm.status,
@@ -687,15 +682,18 @@ export function AdminCentralPage() {
                   <div>
                     {/* Capa */}
                     <div className="relative aspect-video w-full bg-secondary overflow-hidden">
-                      <img
-                        key={course.cover_url}
-                        src={course.cover_url || "/images/capa-padrao.png"}
-                        alt={course.title}
-                        className="size-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = "/images/capa-padrao.png";
-                        }}
-                      />
+                      {course.cover_url ? (
+                        <img
+                          key={course.cover_url}
+                          src={course.cover_url}
+                          alt={course.title}
+                          className="size-full object-cover"
+                        />
+                      ) : (
+                        <div className="grid size-full place-items-center bg-gradient-to-br from-primary/20 to-secondary text-primary">
+                          <GraduationCap className="size-10 opacity-60" />
+                        </div>
+                      )}
                       <span className="absolute top-2.5 left-2.5 rounded-md bg-background/80 px-2 py-0.5 text-[10px] font-bold uppercase backdrop-blur-sm">
                         {course.category}
                       </span>
@@ -786,7 +784,7 @@ export function AdminCentralPage() {
                             status: course.status || "published",
                           });
                           setCourseCoverFile(null);
-                          setCourseCoverPreview(course.cover_url || "/images/capa-padrao.png");
+                          setCourseCoverPreview(course.cover_url || "");
                           setCourseModalOpen(true);
                         }}
                         className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
@@ -1202,7 +1200,7 @@ export function AdminCentralPage() {
                         const localUrl = URL.createObjectURL(file);
                         setCourseCoverPreview(localUrl);
                       } else {
-                        setCourseCoverPreview(courseForm.cover_url || "/images/capa-padrao.png");
+                        setCourseCoverPreview(courseForm.cover_url || "");
                       }
                     }}
                   />
@@ -1210,15 +1208,18 @@ export function AdminCentralPage() {
                   <div className="flex flex-col items-center justify-between rounded-xl border border-border bg-secondary/20 p-3">
                     <p className="text-[11px] font-semibold text-muted-foreground mb-2">Previa da Capa:</p>
                     <div className="aspect-[9/13] max-h-44 w-auto overflow-hidden rounded-lg border border-border bg-secondary shadow-md">
-                      <img
-                        key={courseCoverPreview}
-                        src={courseCoverPreview || courseForm.cover_url || "/images/capa-padrao.png"}
-                        alt="Previa da capa"
-                        className="size-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = "/images/capa-padrao.png";
-                        }}
-                      />
+                      {courseCoverPreview || courseForm.cover_url ? (
+                        <img
+                          key={courseCoverPreview || courseForm.cover_url}
+                          src={courseCoverPreview || courseForm.cover_url}
+                          alt="Previa da capa"
+                          className="size-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex size-full items-center justify-center p-3 text-center text-[10px] text-muted-foreground">
+                          Sem capa selecionada
+                        </div>
+                      )}
                     </div>
                     {courseCoverFile && (
                       <span className="text-[10px] text-emerald-400 font-semibold mt-2">
@@ -1239,10 +1240,10 @@ export function AdminCentralPage() {
                       const val = e.target.value;
                       setCourseForm((prev) => ({ ...prev, cover_url: val }));
                       if (!courseCoverFile) {
-                        setCourseCoverPreview(val || "/images/capa-padrao.png");
+                        setCourseCoverPreview(val || "");
                       }
                     }}
-                    placeholder="/images/capa-padrao.png ou link da imagem"
+                    placeholder="URL pública da imagem ou link direto"
                     className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
                   />
                 </div>
